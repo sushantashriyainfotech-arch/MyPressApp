@@ -1,0 +1,107 @@
+{
+	"actions": [],
+	"autoname": "format:SEAT-LOG-{#####}",
+	"creation": "2026-05-18 00:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"editable_grid": 0,
+	"field_order": [
+		"subscription",
+		"site",
+		"old_seats",
+		"new_seats",
+		"change_type",
+		"access_updated_at",
+		"billing_effective_from",
+		"changed_by",
+		"change_date",
+		"proration_amount"
+	],
+	"fields": [
+		{
+			"fieldname": "subscription",
+			"fieldtype": "Link",
+			"label": "Subscription",
+			"options": "Subscription",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "site",
+			"fieldtype": "Link",
+			"label": "Site",
+			"options": "Site",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "old_seats",
+			"fieldtype": "Int",
+			"label": "Old Seats",
+			"reqd": 1
+		},
+		{
+			"fieldname": "new_seats",
+			"fieldtype": "Int",
+			"label": "New Seats",
+			"reqd": 1
+		},
+		{
+			"fieldname": "change_type",
+			"fieldtype": "Select",
+			"label": "Change Type",
+			"options": "Increase\nDecrease",
+			"reqd": 1
+		},
+		{
+			"fieldname": "access_updated_at",
+			"fieldtype": "Datetime",
+			"label": "Access Updated At",
+			"reqd": 1
+		},
+		{
+			"fieldname": "billing_effective_from",
+			"fieldtype": "Date",
+			"label": "Billing Effective From",
+			"reqd": 1
+		},
+		{
+			"fieldname": "changed_by",
+			"fieldtype": "Link",
+			"label": "Changed By",
+			"options": "User",
+			"reqd": 1
+		},
+		{
+			"fieldname": "change_date",
+			"fieldtype": "Datetime",
+			"label": "Change Date",
+			"reqd": 1
+		},
+		{
+			"fieldname": "proration_amount",
+			"fieldtype": "Currency",
+			"label": "Proration Amount",
+			"options": "INR"
+		}
+	],
+	"issingle": 0,
+	"links": [],
+	"modified": "2026-05-18 00:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Erpnext Saas Model",
+	"name": "Seat Change Log",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"read": 1,
+			"role": "System Manager",
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"track_changes": 1
+}

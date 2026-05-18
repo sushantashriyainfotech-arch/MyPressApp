@@ -1,0 +1,1 @@
+"""Seat Change Log doctype."""

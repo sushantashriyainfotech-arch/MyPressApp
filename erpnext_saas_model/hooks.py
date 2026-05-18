@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["press"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -132,6 +132,12 @@ app_license = "mit"
 # override_doctype_class = {
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
+override_doctype_class = {
+	"Site Plan": ["erpnext_saas_model.doctype.site_plan.site_plan.SitePlan"],
+	"Subscription": ["erpnext_saas_model.doctype.subscription.subscription.Subscription"],
+	"Usage Record": ["erpnext_saas_model.doctype.usage_record.usage_record.UsageRecord"],
+	"Invoice": ["erpnext_saas_model.doctype.invoice.invoice.Invoice"],
+}
 
 # Document Events
 # ---------------
@@ -165,6 +171,13 @@ app_license = "mit"
 # 		"erpnext_saas_model.tasks.monthly"
 # 	],
 # }
+scheduler_events = {
+	"cron": {
+		"0 18 * * *": [
+			"erpnext_saas_model.seat_billing.create_seat_usage_records",
+		],
+	},
+}
 
 # Testing
 # -------
@@ -246,4 +259,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
