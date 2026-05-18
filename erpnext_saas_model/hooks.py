@@ -16,9 +16,8 @@ required_apps = ["press"]
 # 		"name": "erpnext_saas_model",
 # 		"logo": "/assets/erpnext_saas_model/logo.png",
 # 		"title": "Erpnext Saas Model",
-# 		"route": "/erpnext_saas_model",
-# 		"has_permission": "erpnext_saas_model.api.permission.has_app_permission"
-# 	}
+# 		"route": "/seat-billing",
+# 	},
 # ]
 
 # Includes in <head>
@@ -47,6 +46,11 @@ required_apps = ["press"]
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
+doctype_js = {
+	"Site Plan": "public/js/site_plan.js",
+	"Subscription": "public/js/subscription.js",
+	"Invoice": "public/js/invoice.js",
+}
 
 # Svg Icons
 # ------------------

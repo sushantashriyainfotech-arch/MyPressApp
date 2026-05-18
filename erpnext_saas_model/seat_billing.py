@@ -34,6 +34,79 @@ def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
 	return flt(price, 2)
 
 
+def get_seat_plans() -> list[dict[str, Any]]:
+	return frappe.get_all(
+		"Site Plan",
+		filters={"enabled": 1, "billing_type": "Seat Based"},
+		fields=["name", "plan_title", "price_per_seat", "min_seats", "max_seats", "next_plan"],
+		order_by="price_per_seat asc, name asc",
+	)
+
+
+def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, Any]]:
+	return frappe.get_all(
+		"Seat Change Log",
+		filters={"subscription": subscription},
+		fields=[
+			"name",
+			"old_seats",
+			"new_seats",
+			"change_type",
+			"access_updated_at",
+			"billing_effective_from",
+			"changed_by",
+			"change_date",
+		],
+		order_by="creation desc",
+		limit=limit,
+	)
+
+
+def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any]:
+	subscriptions = frappe.get_all(
+		"Subscription",
+		filters={"plan_type": "Site Plan"},
+		fields=[
+			"name",
+			"site",
+			"plan",
+			"plan_type",
+			"enabled",
+			"billable_seats",
+			"price_per_seat",
+			"total_amount",
+			"seats_last_updated",
+		],
+		order_by="modified desc",
+	)
+	plans = get_seat_plans()
+
+	selected_subscription = subscription
+	if not selected_subscription and subscriptions:
+		selected_subscription = subscriptions[0]["name"]
+
+	current = None
+	logs = []
+	active_user_count = 0
+	if selected_subscription:
+		try:
+			current = get_subscription_seat_context(selected_subscription)
+			current["name"] = selected_subscription
+			current["subscription"] = frappe.get_doc("Subscription", selected_subscription).as_dict()
+			active_user_count = get_active_user_count(current["subscription"]["site"]) if current["subscription"].get("site") else 0
+			logs = get_seat_change_logs(selected_subscription, limit=10)
+		except Exception:
+			current = None
+
+	return {
+		"subscriptions": subscriptions,
+		"plans": plans,
+		"current": current,
+		"active_user_count": active_user_count,
+		"logs": logs,
+	}
+
+
 @frappe.whitelist()
 def get_seat_pricing_preview(plan: str, seats: int = 1) -> dict[str, Any]:
 	plan_doc = frappe.get_cached_doc("Site Plan", plan)
@@ -188,6 +261,41 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 	}
 
 
+def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any], new_seats: int) -> dict[str, Any]:
+	plan_doc = frappe.get_cached_doc("Site Plan", plan) if isinstance(plan, str) else plan
+	new_seats = cint(new_seats)
+	min_seats = cint(getattr(plan_doc, "min_seats", 0) or 1)
+	if new_seats < min_seats:
+		frappe.throw(_("You need at least {0} seats on this plan.").format(min_seats))
+
+	max_seats = cint(getattr(plan_doc, "max_seats", 0) or 0)
+	if max_seats and new_seats > max_seats:
+		return {
+			"error_code": "SEATS_EXCEED_PLAN_LIMIT",
+			"suggested_plan": getattr(plan_doc, "next_plan", None),
+			"message": _("Requested seats exceed the current plan limit."),
+		}
+
+	active_user_count = 0
+	if site:
+		active_user_count = get_active_user_count(site)
+		if new_seats < active_user_count:
+			frappe.throw(
+				_("You have {0} active users. Please deactivate users before reducing your seat count.").format(
+					active_user_count
+				)
+			)
+
+	price_per_seat = get_plan_price_per_seat(plan_doc)
+	return {
+		"plan": plan_doc.name,
+		"billable_seats": new_seats,
+		"price_per_seat": price_per_seat,
+		"total_amount": flt(price_per_seat * new_seats, 2),
+		"active_user_count": active_user_count,
+	}
+
+
 def log_seat_change(
 	subscription: str,
 	old_seats: int,
@@ -324,6 +432,50 @@ def create_seat_usage_records(date=None):
 def change_subscription_seats(subscription: str, new_seats: int) -> dict[str, Any]:
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
 	return subscription_doc.update_billable_seats(new_seats)
+
+
+@frappe.whitelist()
+def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[str, Any]:
+	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
+	validation = validate_seat_selection_for_plan(subscription_doc.site, plan, new_seats)
+	if validation.get("error_code") == "SEATS_EXCEED_PLAN_LIMIT":
+		return validation
+
+	plan_doc = frappe.get_cached_doc("Site Plan", plan)
+	old_seats = cint(getattr(subscription_doc, "billable_seats", 0) or 0)
+	subscription_doc.flags.skip_seat_change_log = True
+	subscription_doc.plan_type = "Site Plan"
+	subscription_doc.plan = plan_doc.name
+	subscription_doc.billable_seats = cint(validation["billable_seats"])
+	subscription_doc.price_per_seat = flt(validation["price_per_seat"], 2)
+	subscription_doc.total_amount = flt(validation["total_amount"], 2)
+	subscription_doc.seats_last_updated = now_datetime()
+	subscription_doc.enabled = 1
+	subscription_doc.save(ignore_permissions=True)
+	subscription_doc.flags.skip_seat_change_log = False
+
+	if old_seats != subscription_doc.billable_seats:
+		log_seat_change(
+			subscription=subscription_doc.name,
+			old_seats=old_seats,
+			new_seats=subscription_doc.billable_seats,
+			changed_by=frappe.session.user,
+			access_updated_at=subscription_doc.seats_last_updated,
+			billing_effective_from=get_billing_effective_from(subscription_doc.seats_last_updated),
+		)
+
+	sync_site_access(subscription_doc)
+	return {
+		"subscription": subscription_doc.name,
+		"plan": plan_doc.name,
+		"plan_title": getattr(plan_doc, "plan_title", None) or plan_doc.name,
+		"billable_seats": subscription_doc.billable_seats,
+		"price_per_seat": subscription_doc.price_per_seat,
+		"total_amount": subscription_doc.total_amount,
+		"message": _(
+			"Your seat count has been updated to {0}. Billing will reflect this change from today's daily update at 6 PM."
+		).format(subscription_doc.billable_seats),
+	}
 
 
 def _insert_seat_usage_record(subscription, date, backfill: bool = False):
