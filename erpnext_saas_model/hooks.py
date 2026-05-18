@@ -137,6 +137,7 @@ doctype_js = {
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
 override_doctype_class = {
+	"Site": ["erpnext_saas_model.doctype.site.site.Site"],
 	"Site Plan": ["erpnext_saas_model.doctype.site_plan.site_plan.SitePlan"],
 	"Subscription": ["erpnext_saas_model.doctype.subscription.subscription.Subscription"],
 	"Usage Record": ["erpnext_saas_model.doctype.usage_record.usage_record.UsageRecord"],
@@ -194,6 +195,9 @@ scheduler_events = {
 # override_whitelisted_methods = {
 # 	"frappe.desk.doctype.event.event.get_events": "erpnext_saas_model.event.get_events"
 # }
+override_whitelisted_methods = {
+	"press.api.site.get_site_plans": "erpnext_saas_model.api.site.get_site_plans",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

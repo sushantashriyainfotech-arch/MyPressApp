@@ -20,6 +20,18 @@ from erpnext_saas_model.seat_billing import (
 
 
 class Subscription(PressSubscription):
+	def _get_seed_billable_seats(self, plan) -> int:
+		site_billable_seats = 0
+		if getattr(self, "document_type", None) == "Site" and getattr(self, "document_name", None):
+			site_billable_seats = cint(
+				frappe.db.get_value("Site", self.document_name, "billable_seats") or 0
+			)
+
+		if site_billable_seats:
+			return site_billable_seats
+
+		return cint(getattr(plan, "min_seats", 0) or 1)
+
 	def before_validate(self):
 		super().before_validate()
 		if not self.plan:
@@ -30,7 +42,7 @@ class Subscription(PressSubscription):
 			return
 
 		if not cint(getattr(self, "billable_seats", 0) or 0):
-			self.billable_seats = cint(getattr(plan, "min_seats", 0) or 1)
+			self.billable_seats = self._get_seed_billable_seats(plan)
 
 		if not getattr(self, "price_per_seat", None):
 			self.price_per_seat = get_plan_price_per_seat(plan)
@@ -49,7 +61,7 @@ class Subscription(PressSubscription):
 
 		min_seats = cint(getattr(plan, "min_seats", 0) or 1)
 		max_seats = cint(getattr(plan, "max_seats", 0) or 0)
-		self.billable_seats = cint(getattr(self, "billable_seats", 0) or min_seats)
+		self.billable_seats = cint(getattr(self, "billable_seats", 0) or self._get_seed_billable_seats(plan))
 		if self.billable_seats < min_seats:
 			frappe.throw(f"You need at least {min_seats} seats on this plan.")
 

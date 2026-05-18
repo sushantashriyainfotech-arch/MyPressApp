@@ -13,6 +13,7 @@ def _ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
 
 def execute():
 	ensure_site_plan_fields()
+	ensure_site_fields()
 	ensure_subscription_fields()
 	ensure_usage_record_fields()
 	ensure_invoice_fields()
@@ -78,6 +79,21 @@ def ensure_site_plan_fields():
 			"options": "Site Plan",
 			"depends_on": "eval:doc.billing_type == 'Seat Based'",
 			"insert_after": "max_seats",
+		},
+	)
+
+
+def ensure_site_fields():
+	_ensure_custom_field(
+		"Site",
+		"billable_seats",
+		{
+			"label": "Billable Seats",
+			"fieldname": "billable_seats",
+			"fieldtype": "Int",
+			"default": "1",
+			"hidden": 1,
+			"insert_after": "subscription_plan",
 		},
 	)
 
