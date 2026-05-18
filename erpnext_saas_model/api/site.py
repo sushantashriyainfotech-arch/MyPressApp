@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 
 from press.api.site import get_site_plans as get_press_site_plans
+from press.api.site import change_plan as change_press_plan
 
 from erpnext_saas_model.seat_billing import is_seat_based_plan
 
@@ -23,3 +24,13 @@ def get_site_plans():
 		plan["next_plan"] = getattr(plan_doc, "next_plan", None)
 
 	return plans
+
+
+@frappe.whitelist()
+def change_plan(name, plan, billable_seats=None):
+	site = frappe.get_doc("Site", name)
+	if billable_seats is not None:
+		site.set_plan(plan, billable_seats=billable_seats)
+		return
+
+	return change_press_plan(name, plan)

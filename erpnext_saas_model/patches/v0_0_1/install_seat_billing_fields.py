@@ -93,7 +93,7 @@ def ensure_site_fields():
 			"fieldtype": "Int",
 			"default": "1",
 			"hidden": 1,
-			"insert_after": "subscription_plan",
+			"insert_after": "plan",
 		},
 	)
 

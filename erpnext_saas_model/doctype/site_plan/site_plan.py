@@ -23,8 +23,3 @@ class SitePlan(PressSitePlan):
 			"price_per_seat": price,
 			"total_amount": total,
 		}
-
-	def validate(self):
-		super().validate()
-		if self.is_seat_based() and not cint(getattr(self, "min_seats", 0) or 0):
-			self.min_seats = 1

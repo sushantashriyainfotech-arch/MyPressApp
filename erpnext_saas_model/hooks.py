@@ -25,7 +25,7 @@ required_apps = ["press"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/erpnext_saas_model/css/erpnext_saas_model.css"
-# app_include_js = "/assets/erpnext_saas_model/js/erpnext_saas_model.js"
+app_include_js = "/assets/erpnext_saas_model/js/seat_billing_runtime.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/erpnext_saas_model/css/erpnext_saas_model.css"
@@ -197,6 +197,7 @@ scheduler_events = {
 # }
 override_whitelisted_methods = {
 	"press.api.site.get_site_plans": "erpnext_saas_model.api.site.get_site_plans",
+	"press.api.site.change_plan": "erpnext_saas_model.api.site.change_plan",
 }
 #
 # each overriding function accepts a `data` argument;
