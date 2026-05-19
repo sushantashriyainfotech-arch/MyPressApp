@@ -23,10 +23,12 @@ class SitePlan(PressSitePlan):
 	def validate(self):
 		"""
 		Standard validation hook.
-		- Ensures parent validation logic (roles, active subs) is executed.
+		- Safely calls parent validation logic if it exists (handles core Press overrides comfortably).
 		- Defaults min_seats to 1 for seat-based plans to prevent division errors.
 		"""
-		super().validate()
+		if hasattr(PressSitePlan, "validate"):
+			PressSitePlan.validate(self)
+
 		if self.is_seat_based():
 			if not cint(getattr(self, "min_seats", 0) or 0):
 				self.min_seats = 1
