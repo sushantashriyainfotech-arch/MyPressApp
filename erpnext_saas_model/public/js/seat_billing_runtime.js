@@ -8,9 +8,10 @@
 		billableSeats: 1,
 		panel: null,
 		planGrid: null,
+		step: 1, // 1: Plan selection, 2: Seat selection
 	};
 
-	const ROUTE_HINTS = ['sites/new', '/app/site/'];
+	const ROUTE_HINTS = ['sites/new', '/app/press/site/'];
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
 
 	function normalize(value) {
@@ -24,18 +25,34 @@
 		if (ROUTE_HINTS.some((hint) => path.includes(hint))) return true;
 
 		const bodyText = document.body?.innerText || '';
-		return bodyText.includes('Setup Subscription') || bodyText.includes('Change Plan');
+		return (
+			bodyText.includes('Setup Subscription') ||
+			bodyText.includes('Change Plan') ||
+			bodyText.includes('Select Plan for')
+		);
 	}
 
 	function currencySymbol() {
+		// Use the symbol from the active currency, or fallback to the currency code itself
 		const currency = window.frappe?.boot?.sysdefaults?.currency || 'USD';
-		return currency === 'INR' ? '₹' : '$';
+		const symbols = window.frappe?.boot?.currency_symbols || {};
+		return symbols[currency] || currency; // e.g., Returns '€' for EUR, '£' for GBP, etc.
 	}
 
 	function formatCurrency(value) {
 		const amount = Number(value || 0);
-		return `${currencySymbol()}${amount.toFixed(2)}`;
+		const symbol = currencySymbol();
+		
+		// If you want to use Frappe's standard currency formatting logic, 
+		// you can use the global format_currency if it's available:
+		if (window.format_currency) {
+			return window.format_currency(amount, window.frappe?.boot?.sysdefaults?.currency);
+		}
+		
+		// Manual fallback
+		return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 	}
+
 
 	function isSeatBased(plan) {
 		return plan && plan.billing_type === 'Seat Based';
@@ -121,6 +138,17 @@
 			state.panel.dataset.erpSeatBillingPanel = '1';
 		}
 
+		if (state.step === 1) {
+			renderStep1();
+		} else {
+			renderStep2();
+		}
+	}
+
+	function renderStep1() {
+		if (!state.panel) return;
+		state.planGrid.style.display = '';
+
 		const plan = state.selectedPlan;
 		if (!isSeatBased(plan)) {
 			state.panel.style.display = 'none';
@@ -133,9 +161,45 @@
 		state.panel.style.display = '';
 		state.billableSeats = clampSeats(plan, state.billableSeats);
 
+		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
+
+		state.panel.innerHTML = `
+			<div class="flex items-start justify-between gap-4">
+				<div>
+					<div class="text-sm font-medium text-ink-gray-9">Seat billing available</div>
+					<div class="text-xs text-ink-gray-6">Custom seat pricing will be applied in the next step.</div>
+				</div>
+				<div class="text-right">
+					<button class="bg-surface-white border border-outline-gray-3 rounded px-3 py-1.5 text-sm font-medium hover:bg-surface-gray-1 transition-colors" data-role="next-step">
+						Configure Seats
+					</button>
+				</div>
+			</div>
+		`;
+
+		state.panel.querySelector('[data-role="next-step"]').onclick = () => {
+			state.step = 2;
+			renderPanel();
+		};
+
+		if (!state.panel.isConnected) {
+			state.planGrid.insertAdjacentElement('afterend', state.panel);
+		}
+	}
+
+	function renderStep2() {
+		if (!state.panel) return;
+
+		state.planGrid.style.display = 'none';
+		state.panel.style.display = '';
+
+		const plan = state.selectedPlan;
+		state.billableSeats = clampSeats(plan, state.billableSeats);
+
 		const minSeats = Number(plan.min_seats || 1);
 		const maxSeats = Number(plan.max_seats || 0);
 		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
+
 		const seatRangeText = maxSeats
 			? `Min ${minSeats} seats · Up to ${maxSeats} seats`
 			: `Min ${minSeats} seats`;
@@ -146,47 +210,62 @@
 			: '';
 
 		state.panel.innerHTML = `
+			<div>
+				<button class="text-xs text-ink-gray-6 hover:text-ink-gray-9 flex items-center gap-1 mb-4" data-role="back-to-plans">
+					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+					Back to plans
+				</button>
+			</div>
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<div class="text-sm font-medium text-ink-gray-9">Seat billing</div>
+					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
+					<div class="text-sm font-medium text-ink-gray-9">Configure Seats</div>
 					<div class="text-xs text-ink-gray-6" data-role="seat-range"></div>
 				</div>
 				<div class="text-right">
 					<div class="text-xs text-ink-gray-6">Monthly total</div>
-					<div class="text-base font-semibold text-ink-gray-9" data-role="seat-total"></div>
+					<div class="text-xl font-bold text-ink-primary" data-role="seat-total"></div>
 				</div>
 			</div>
-			<div class="mt-3 grid gap-3 sm:grid-cols-[160px_1fr] sm:items-center">
-				<label class="text-sm font-medium text-ink-gray-8">Billable seats</label>
-				<input
-					type="number"
-					min="${minSeats}"
-					${maxSeats ? `max="${maxSeats}"` : ''}
-					class="h-9 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
-					data-role="seat-input"
-				/>
+			<div class="mt-6 grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
+				<label class="text-sm font-medium text-ink-gray-8">How many seats?</label>
+				<div class="flex items-center gap-2">
+					<input
+						type="number"
+						min="${minSeats}"
+						${maxSeats ? `max="${maxSeats}"` : ''}
+						class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
+						data-role="seat-input"
+					/>
+					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(plan.price_per_seat)} per seat</span>
+				</div>
 			</div>
-			<div class="mt-2 text-xs text-ink-gray-6" data-role="seat-pricing"></div>
+			<div class="mt-4 text-sm text-ink-gray-6 bg-surface-gray-2 p-3 rounded border border-outline-gray-2">
+				<strong>Billing details:</strong> Your base plan cost will be replaced by the seat-based total shown above.
+			</div>
 			<div class="mt-2 text-xs text-red-600" data-role="seat-warning"></div>
 		`;
+
+		state.panel.querySelector('[data-role="back-to-plans"]').onclick = () => {
+			state.step = 1;
+			renderPanel();
+		};
 
 		state.panel.querySelector('[data-role="seat-range"]').textContent = seatRangeText;
 		state.panel.querySelector('[data-role="seat-total"]').textContent =
 			formatCurrency(total);
-		state.panel.querySelector('[data-role="seat-pricing"]').textContent = `${formatCurrency(
-			plan.price_per_seat,
-		)} per seat`;
+
 		const warningEl = state.panel.querySelector('[data-role="seat-warning"]');
 		warningEl.textContent = warningText;
 		warningEl.style.display = warningText ? '' : 'none';
 
 		const input = state.panel.querySelector('[data-role="seat-input"]');
 		input.value = String(state.billableSeats || minSeats);
-		input.addEventListener('input', () => {
+		input.oninput = () => {
 			state.billableSeats = clampSeats(plan, input.value);
 			input.value = String(state.billableSeats);
 			renderPanel();
-		});
+		};
 
 		if (!state.panel.isConnected) {
 			state.planGrid.insertAdjacentElement('afterend', state.panel);
@@ -197,14 +276,31 @@
 		if (!state.planGrid) return;
 		const selected = getSelectedPlanFromGrid(state.planGrid);
 		if (selected) {
-			state.selectedPlan = selected;
-			state.billableSeats = clampSeats(selected, state.billableSeats);
+			if (state.selectedPlan?.name !== selected.name) {
+				state.selectedPlan = selected;
+				state.billableSeats = clampSeats(selected, 1);
+				state.step = 1; // Reset step on plan change
+			}
+		} else {
+			state.selectedPlan = null;
+			state.step = 1;
 		}
 		renderPanel();
 	}
 
 	function findPlanGrid() {
-		const divs = Array.from(document.querySelectorAll('div'));
+		// Look inside dialogs first
+		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
+		for (const dialog of dialogs) {
+			const grid = findGridInContainer(dialog);
+			if (grid) return grid;
+		}
+
+		return findGridInContainer(document.body);
+	}
+
+	function findGridInContainer(container) {
+		const divs = Array.from(container.querySelectorAll('div'));
 		for (const el of divs) {
 			const buttons = Array.from(el.children).filter(
 				(child) => child.tagName === 'BUTTON',
@@ -224,7 +320,7 @@
 		grid.addEventListener(
 			'click',
 			() => {
-				setTimeout(refreshSelection, 0);
+				setTimeout(refreshSelection, 10);
 			},
 			true,
 		);
@@ -233,11 +329,18 @@
 	function maybeMount() {
 		if (!isRelevantRoute()) return;
 		const grid = findPlanGrid();
-		if (!grid) return;
+		if (!grid) {
+			state.planGrid = null;
+			state.selectedPlan = null;
+			state.step = 1;
+			return;
+		}
 
-		state.planGrid = grid;
-		bindPlanGrid(grid);
-		refreshSelection();
+		if (state.planGrid !== grid) {
+			state.planGrid = grid;
+			bindPlanGrid(grid);
+			refreshSelection();
+		}
 	}
 
 	function updateRequestBody(url, body) {
@@ -291,7 +394,7 @@
 						: input && input.url
 							? input.url
 							: '';
-		if (
+				if (
 					url.includes('press.api.site.new') ||
 					url.includes('press.api.client.insert') ||
 					url.includes('set_plan') ||
@@ -339,6 +442,7 @@
 	function observe() {
 		const refresh = () => {
 			maybeMount();
+			interceptDialogButtons();
 		};
 
 		const observer = new MutationObserver(refresh);
@@ -354,15 +458,37 @@
 		const originalReplaceState = history.replaceState;
 
 		history.pushState = function () {
-			const result = originalPushState.apply(this, arguments);
+			originalPushState.apply(this, arguments);
 			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-			return result;
 		};
 		history.replaceState = function () {
-			const result = originalReplaceState.apply(this, arguments);
+			originalReplaceState.apply(this, arguments);
 			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-			return result;
 		};
+	}
+
+	function interceptDialogButtons() {
+		if (!isSeatBased(state.selectedPlan)) return;
+
+		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
+		for (const dialog of dialogs) {
+			const buttons = Array.from(dialog.querySelectorAll('button'));
+			const primaryButton = buttons.find(b =>
+				b.textContent.includes('Select Plan') ||
+				b.textContent.includes('Change Plan') ||
+				b.textContent.includes('Setup Subscription')
+			);
+
+			if (primaryButton) {
+				if (state.step === 1) {
+					primaryButton.disabled = true;
+					primaryButton.title = 'Please configure seats first';
+				} else {
+					primaryButton.disabled = false;
+					primaryButton.title = '';
+				}
+			}
+		}
 	}
 
 	async function init() {

@@ -103,7 +103,7 @@ def ensure_site_fields():
 			"fieldname": "billable_seats",
 			"fieldtype": "Int",
 			"default": "1",
-			"hidden": 1,
+			"hidden": 0,
 			"insert_after": "plan",
 		},
 	)
