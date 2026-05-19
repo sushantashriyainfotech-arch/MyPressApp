@@ -47,6 +47,7 @@ app_include_js = "/assets/erpnext_saas_model/js/seat_billing_runtime.js"
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 doctype_js = {
+	"Site": "public/js/site.js",
 	"Site Plan": "public/js/site_plan.js",
 	"Subscription": "public/js/subscription.js",
 	"Invoice": "public/js/invoice.js",
