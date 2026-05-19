@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+# pyrefly: ignore [missing-import]
 import frappe
+# pyrefly: ignore [missing-import]
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 
 
 def _ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
-	if frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": fieldname}):
+	custom_field_name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname})
+	if custom_field_name:
+		custom_field = frappe.get_doc("Custom Field", custom_field_name)
+		changed = False
+		for key, value in df.items():
+			if getattr(custom_field, key, None) != value:
+				setattr(custom_field, key, value)
+				changed = True
+		if changed:
+			custom_field.save(ignore_permissions=True)
 		return
 
 	create_custom_field(doctype, df, ignore_validate=True)
@@ -30,7 +41,7 @@ def ensure_site_plan_fields():
 			"fieldname": "billing_type",
 			"fieldtype": "Select",
 			"options": "Seat Based\nResource Based",
-			"default": "Seat Based",
+			"default": "Resource Based",
 			"insert_after": "plan_title",
 		},
 	)
