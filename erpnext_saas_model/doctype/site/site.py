@@ -12,7 +12,19 @@ from erpnext_saas_model.seat_billing import (
 
 
 class Site(PressSite):
+	"""
+	Extended Site controller for seat-based billing modeling.
+	Overrides base Press Site to handle seat count validation during 
+	site creation and plan updates.
+	"""
+
 	def validate(self):
+		"""
+		Enforces seat-based billing rules during site validation.
+		- Checks if the selected plan is seat-based.
+		- Validates the requested billable_seats against plan minimums.
+		- Throws an error if seats exceed the current plan's hard limit.
+		"""
 		super().validate()
 
 		plan_name = getattr(self, "subscription_plan", None) or getattr(self, "plan", None)
@@ -23,11 +35,14 @@ class Site(PressSite):
 		if not is_seat_based_plan(plan):
 			return
 
+		# Default to plan's minimum seats if not specified
 		requested_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		if not requested_seats:
 			requested_seats = cint(getattr(plan, "min_seats", 0) or 1)
 
 		self.billable_seats = requested_seats
+		
+		# Cross-verify with plan configuration
 		validation = validate_seat_selection_for_plan(None, plan, requested_seats)
 		if validation.get("error_code") == "SEATS_EXCEED_PLAN_LIMIT":
 			suggested_plan = validation.get("suggested_plan")
@@ -38,6 +53,10 @@ class Site(PressSite):
 			frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
 
 	def set_plan(self, plan: None | str = None, billable_seats: int | None = None):
+		"""
+		Helper to update both the plan and the billable seat count atomically.
+		Updates the database directly for immediate reflection in the UI.
+		"""
 		if billable_seats is not None and self.name:
 			self.billable_seats = cint(billable_seats)
 			frappe.db.set_value("Site", self.name, "billable_seats", self.billable_seats)

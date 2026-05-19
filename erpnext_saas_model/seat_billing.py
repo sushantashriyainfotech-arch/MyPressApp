@@ -12,6 +12,9 @@ ACTIVE_USER_CACHE_TTL = 60 * 5
 
 
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
+	"""
+	Checks if a given Site Plan follows a 'Seat Based' billing model.
+	"""
 	if not plan:
 		return False
 
@@ -23,6 +26,10 @@ def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
 
 
 def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
+	"""
+	Fetches the configured price per seat for a specific Site Plan.
+	Defaults to 0.0 if not found.
+	"""
 	if not plan:
 		return 0.0
 
@@ -35,6 +42,10 @@ def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
 
 
 def get_seat_plans() -> list[dict[str, Any]]:
+	"""
+	Returns a list of all enabled Site Plans that use seat-based billing.
+	Ordered by price (ascending).
+	"""
 	return frappe.get_all(
 		"Site Plan",
 		filters={"enabled": 1, "billing_type": "Seat Based"},
@@ -44,6 +55,9 @@ def get_seat_plans() -> list[dict[str, Any]]:
 
 
 def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, Any]]:
+	"""
+	Fetches recent audit logs for seat count changes on a specific subscription.
+	"""
 	return frappe.get_all(
 		"Seat Change Log",
 		filters={"subscription": subscription},
@@ -63,6 +77,10 @@ def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, A
 
 
 def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any]:
+	"""
+	Collects all data required for the Seat Billing Dashboard view.
+	Returns active subscriptions, available plans, and historical logs.
+	"""
 	subscriptions = frappe.get_all(
 		"Subscription",
 		filters={"plan_type": "Site Plan"},
@@ -90,6 +108,7 @@ def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any
 	active_user_count = 0
 	if selected_subscription:
 		try:
+			# Gather context for the currently viewed subscription
 			current = get_subscription_seat_context(selected_subscription)
 			current["name"] = selected_subscription
 			current["subscription"] = frappe.get_doc("Subscription", selected_subscription).as_dict()
@@ -109,6 +128,10 @@ def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any
 
 @frappe.whitelist()
 def get_seat_pricing_preview(plan: str, seats: int = 1) -> dict[str, Any]:
+	"""
+	API method to calculate pricing for a plan/seat combination without saving.
+	Used by frontend UI for real-time cost estimation.
+	"""
 	plan_doc = frappe.get_cached_doc("Site Plan", plan)
 	if not is_seat_based_plan(plan_doc):
 		return {
@@ -132,10 +155,15 @@ def get_seat_pricing_preview(plan: str, seats: int = 1) -> dict[str, Any]:
 
 
 def get_currency_symbol(currency: str | None) -> str:
+	"""Returns the symbol for the team's currency."""
 	return "₹" if currency == "INR" else "$"
 
 
 def get_next_snapshot_date(moment: datetime | None = None):
+	"""
+	Determines the date of the next billing snapshot.
+	Snapshots happen daily at 6 PM (18:00).
+	"""
 	moment = moment or now_datetime()
 	if moment.time() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
 		return moment.date()
@@ -144,6 +172,10 @@ def get_next_snapshot_date(moment: datetime | None = None):
 
 
 def get_billing_effective_from(moment: datetime | None = None):
+	"""
+	Determines when a seat change should start being billed.
+	Changes made after 6 PM take effect from the next day's snapshot.
+	"""
 	moment = moment or now_datetime()
 	if moment.time() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
 		return getdate(moment.date())
@@ -152,6 +184,7 @@ def get_billing_effective_from(moment: datetime | None = None):
 
 
 def _extract_users_from_analytics(analytics_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+	"""Internal helper to parse user lists from Site Analytics data."""
 	if not analytics_payload:
 		return []
 
@@ -165,6 +198,7 @@ def _extract_users_from_analytics(analytics_payload: dict[str, Any] | None) -> l
 
 
 def _get_site_analytics(site_name: str) -> dict[str, Any]:
+	"""Fetches real-time site analytics (including user state) from the Press Agent."""
 	site = frappe.get_cached_doc("Site", site_name)
 	analytics = site.fetch_analytics()
 	if not analytics:
@@ -174,6 +208,10 @@ def _get_site_analytics(site_name: str) -> dict[str, Any]:
 
 
 def get_active_user_count(site_name: str) -> int:
+	"""
+	Queries the site to count 'enabled' users.
+	Results are cached for ACTIVE_USER_CACHE_TTL to improve UI performance.
+	"""
 	cache_key = f"erpnext_saas_model:seat_billing:active_users:{site_name}"
 	cached_value = frappe.cache().get_value(cache_key)
 	if cached_value is not None:
@@ -191,6 +229,10 @@ def get_active_user_count(site_name: str) -> int:
 
 
 def get_subscription_seat_context(subscription: str | dict[str, Any]) -> dict[str, Any]:
+	"""
+	Compiles a context object representing the current seat-billing state 
+	of a subscription (count, price, total).
+	"""
 	if isinstance(subscription, dict):
 		subscription_doc = subscription
 	else:
@@ -212,6 +254,12 @@ def get_subscription_seat_context(subscription: str | dict[str, Any]) -> dict[st
 
 
 def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> dict[str, Any]:
+	"""
+	Validates if a proposed new seat count is allowed.
+	- Must be >= Plan minimum.
+	- Must be <= Plan maximum (if defined).
+	- Must be >= Current enabled user count on the site.
+	"""
 	if isinstance(subscription, dict):
 		subscription_doc = subscription
 		subscription_name = subscription_doc["name"]
@@ -242,6 +290,7 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 			"message": _("Requested seats exceed the current plan limit."),
 		}
 
+	# Ensure they don't buy fewer seats than they have active users
 	active_user_count = get_active_user_count(subscription_doc["site"])
 	if new_seats < active_user_count:
 		frappe.throw(
@@ -262,6 +311,10 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 
 
 def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any], new_seats: int) -> dict[str, Any]:
+	"""
+	Validates seat selection for a specific plan. 
+	Used during initial signup or checkout flows where a subscription doesn't exist yet.
+	"""
 	plan_doc = frappe.get_cached_doc("Site Plan", plan) if isinstance(plan, str) else plan
 	new_seats = cint(new_seats)
 	min_seats = cint(getattr(plan_doc, "min_seats", 0) or 1)
@@ -305,6 +358,10 @@ def log_seat_change(
 	billing_effective_from=None,
 	proration_amount: float | None = None,
 ):
+	"""
+	Logs a change in seat count for billing audit.
+	This is critical for calculating pro-rated charges in the next billing cycle.
+	"""
 	access_updated_at = access_updated_at or now_datetime()
 	billing_effective_from = billing_effective_from or get_billing_effective_from(access_updated_at)
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
@@ -328,6 +385,10 @@ def log_seat_change(
 
 
 def sync_site_access(subscription: str | dict[str, Any]):
+	"""
+	Notifies the managed Site about its new seat/license limit.
+	Triggers an external API call to the site via the Press Agent.
+	"""
 	if isinstance(subscription, str):
 		subscription_doc = frappe.get_cached_doc("Subscription", subscription)
 	else:
@@ -347,6 +408,10 @@ def sync_site_access(subscription: str | dict[str, Any]):
 
 
 def create_seat_usage_record(subscription: str | dict[str, Any], date=None, force: bool = False):
+	"""
+	Creates a daily Usage Record representing the seat count snapshot for billing.
+	Only executes after the 6 PM daily cutoff.
+	"""
 	if isinstance(subscription, str):
 		subscription_doc = frappe.get_cached_doc("Subscription", subscription)
 	else:
@@ -357,6 +422,7 @@ def create_seat_usage_record(subscription: str | dict[str, Any], date=None, forc
 		return None
 
 	date = getdate(date or frappe.utils.today())
+	# Bypassed if before snapshot time unless forced
 	if date == getdate() and not force and nowtime() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
 		return None
 
@@ -370,6 +436,10 @@ def create_seat_usage_record(subscription: str | dict[str, Any], date=None, forc
 
 
 def backfill_missing_seat_usage_records(subscription, upto_date=None):
+	"""
+	Ensures there are no gaps in usage records for the current billing cycle.
+	Creates 'backfill' snapshots using the legacy seat count if necessary.
+	"""
 	subscription_doc = (
 		frappe.get_cached_doc("Subscription", subscription)
 		if isinstance(subscription, str)
@@ -407,6 +477,10 @@ def backfill_missing_seat_usage_records(subscription, upto_date=None):
 
 
 def create_seat_usage_records(date=None):
+	"""
+	Cron-triggered task to generate daily seat snapshots for all active subscriptions.
+	Called by Frappe Scheduler events.
+	"""
 	date = getdate(date or frappe.utils.today())
 	subscriptions = frappe.get_all(
 		"Subscription",
@@ -430,12 +504,17 @@ def create_seat_usage_records(date=None):
 
 @frappe.whitelist()
 def change_subscription_seats(subscription: str, new_seats: int) -> dict[str, Any]:
+	"""API wrapper to trigger a seat count update on a subscription."""
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
 	return subscription_doc.update_billable_seats(new_seats)
 
 
 @frappe.whitelist()
 def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[str, Any]:
+	"""
+	API method to convert an existing generic subscription into a seat-based one.
+	Sets the plan, initial seat count, and enables the subscription.
+	"""
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
 	validation = validate_seat_selection_for_plan(subscription_doc.site, plan, new_seats)
 	if validation.get("error_code") == "SEATS_EXCEED_PLAN_LIMIT":
@@ -479,6 +558,7 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 
 
 def _insert_seat_usage_record(subscription, date, backfill: bool = False):
+	"""Internal helper to insert a 'Usage Record' document into the database."""
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
 	price_per_seat = flt(subscription.price_per_seat or get_plan_price_per_seat(plan), 2)
 	billable_seats = cint(subscription.billable_seats or 0)
