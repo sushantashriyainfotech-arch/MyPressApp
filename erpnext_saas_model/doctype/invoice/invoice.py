@@ -18,7 +18,9 @@ class Invoice(PressInvoice):
 
 	def add_usage_record(self, usage_record):
 		if not self._is_seat_usage_record(usage_record):
-			return super().add_usage_record(usage_record)
+			if hasattr(PressInvoice, "add_usage_record"):
+				return PressInvoice.add_usage_record(self, usage_record)
+			return
 		if self.type != "Subscription":
 			return
 
@@ -60,7 +62,9 @@ class Invoice(PressInvoice):
 
 	def remove_usage_record(self, usage_record):
 		if not self._is_seat_usage_record(usage_record):
-			return super().remove_usage_record(usage_record)
+			if hasattr(PressInvoice, "remove_usage_record"):
+				return PressInvoice.remove_usage_record(self, usage_record)
+			return
 		if self.type != "Subscription":
 			return
 
@@ -83,13 +87,16 @@ class Invoice(PressInvoice):
 					return row
 			return None
 
-		return super().get_invoice_item_for_usage_record(usage_record)
+		if hasattr(PressInvoice, "get_invoice_item_for_usage_record"):
+			return PressInvoice.get_invoice_item_for_usage_record(self, usage_record)
+		return None
 
 	def validate_items(self):
 		for row in self.items:
 			if getattr(row, "usage_record", None):
 				row.amount = flt((cint(row.quantity) * flt(row.rate or 0, 2)), 2)
-		return super().validate_items()
+		if hasattr(PressInvoice, "validate_items"):
+			return PressInvoice.validate_items(self)
 
 	def update_item_descriptions(self):
 		for item in self.items:
@@ -105,10 +112,12 @@ class Invoice(PressInvoice):
 				f"{price_symbol}{flt(item.rate or 0, 2):.2f} = {price_symbol}{total:.2f}"
 			)
 
-		super().update_item_descriptions()
+		if hasattr(PressInvoice, "update_item_descriptions"):
+			PressInvoice.update_item_descriptions(self)
 
 	def before_validate(self):
-		super().before_validate()
+		if hasattr(PressInvoice, "before_validate"):
+			PressInvoice.before_validate(self)
 		seat_items = [
 			item
 			for item in self.items
