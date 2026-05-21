@@ -1,6 +1,8 @@
 (function () {
 	if (window.__erpnextSeatBillingRuntimeLoaded) return;
 	window.__erpnextSeatBillingRuntimeLoaded = true;
+	console.log('[Seat Billing] Script initialized');
+	document.title = '[SB] ' + document.title;
 
 	const state = {
 		plans: [],
@@ -27,7 +29,11 @@
 
 	function isRelevantRoute() {
 		const path = window.location.pathname || '';
-		if (ROUTE_HINTS.some((hint) => path.includes(hint))) return true;
+		log('Checking route:', path);
+		if (ROUTE_HINTS.some((hint) => path.includes(hint))) {
+			log('Route matches hint');
+			return true;
+		}
 
 		const bodyText = document.body?.innerText || '';
 		return (
