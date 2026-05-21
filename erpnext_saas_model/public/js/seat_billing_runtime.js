@@ -13,6 +13,11 @@
 
 	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
+	const DEBUG = true; // Set to false in production
+
+	function log(...args) {
+		if (DEBUG) console.log('[Seat Billing]', ...args);
+	}
 
 	function normalize(value) {
 		return String(value || '')
@@ -114,14 +119,17 @@
 		if (!buttons.length) return null;
 
 		const selectedButton = buttons.find((button) =>
-			/ring-1|border-outline-gray-5|ring-gray-900|border-gray-900|border-black|border-primary-/.test(
+			/ring-1|border-outline-gray-5|ring-gray-900|border-gray-900|border-black|border-primary-|border-outline-primary/.test(
 				button.className || '',
 			),
 		);
 
+		log('Selected button:', selectedButton);
 		if (!selectedButton) return null;
 
-		return findPlanByText(selectedButton.textContent || '');
+		const plan = findPlanByText(selectedButton.textContent || '');
+		log('Found plan by text:', plan?.name || 'none');
+		return plan;
 	}
 
 	function shouldShowWarning(plan, seats) {
@@ -274,14 +282,18 @@
 
 	function refreshSelection() {
 		if (!state.planGrid) return;
+		log('Refreshing selection...');
 		const selected = getSelectedPlanFromGrid(state.planGrid);
 		if (selected) {
+			log('Current selection:', selected.name);
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
 				state.billableSeats = clampSeats(selected, 1);
 				state.step = 1; // Reset step on plan change
+				log('Plan changed to:', selected.name);
 			}
 		} else {
+			log('No plan selected');
 			state.selectedPlan = null;
 			state.step = 1;
 		}
@@ -317,10 +329,12 @@
 	function bindPlanGrid(grid) {
 		if (!grid || grid.dataset.erpSeatBillingBound === '1') return;
 		grid.dataset.erpSeatBillingBound = '1';
+		log('Binding to plan grid');
 		grid.addEventListener(
 			'click',
 			() => {
-				setTimeout(refreshSelection, 10);
+				log('Grid clicked, scheduling refresh...');
+				setTimeout(refreshSelection, 100);
 			},
 			true,
 		);
@@ -330,6 +344,7 @@
 		if (!isRelevantRoute()) return;
 		const grid = findPlanGrid();
 		if (!grid) {
+			if (state.planGrid) log('Plan grid lost');
 			state.planGrid = null;
 			state.selectedPlan = null;
 			state.step = 1;
@@ -337,8 +352,12 @@
 		}
 
 		if (state.planGrid !== grid) {
+			log('Found plan grid');
 			state.planGrid = grid;
 			bindPlanGrid(grid);
+			refreshSelection();
+		} else {
+			// Periodically refresh selection in case classes changed without a click (e.g. initial load)
 			refreshSelection();
 		}
 	}
