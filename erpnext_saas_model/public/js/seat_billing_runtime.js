@@ -114,7 +114,7 @@
 		if (!buttons.length) return null;
 
 		const selectedButton = buttons.find((button) =>
-			/ring-1|border-outline-gray-5|ring-gray-900/.test(
+			/ring-1|border-outline-gray-5|ring-gray-900|border-gray-900|border-black|border-primary-/.test(
 				button.className || '',
 			),
 		);
