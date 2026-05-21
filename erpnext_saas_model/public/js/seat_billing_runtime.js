@@ -11,7 +11,7 @@
 		step: 1, // 1: Plan selection, 2: Seat selection
 	};
 
-	const ROUTE_HINTS = ['sites/new', '/app/press/site/'];
+	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
 
 	function normalize(value) {
