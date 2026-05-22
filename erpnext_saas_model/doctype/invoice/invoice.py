@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, fmt_money
 
 from press.press.doctype.invoice.invoice import Invoice as PressInvoice
 
-from erpnext_saas_model.seat_billing import get_currency_symbol, is_seat_based_plan
+from erpnext_saas_model.seat_billing import is_seat_based_plan
 
 
 class Invoice(PressInvoice):
@@ -34,13 +34,12 @@ class Invoice(PressInvoice):
 			return
 
 		plan = frappe.get_cached_doc(usage_record.plan_type, usage_record.plan)
-		price_symbol = get_currency_symbol(self.currency)
 		billable_seats = cint(getattr(usage_record, "billable_seats", 0) or 0)
 		seat_amount = flt(getattr(usage_record, "seat_amount", 0) or 0, 2)
 		price_per_seat = flt(seat_amount / billable_seats, 2) if billable_seats else seat_amount
 		description = (
 			f"{getattr(plan, 'plan_title', None) or plan.name} — {billable_seats} seats × "
-			f"{price_symbol}{price_per_seat:.2f} = {price_symbol}{seat_amount:.2f}"
+			f"{fmt_money(price_per_seat, 2, self.currency)} = {fmt_money(seat_amount, 2, self.currency)}"
 		)
 
 		self.append(
@@ -105,11 +104,10 @@ class Invoice(PressInvoice):
 			plan = frappe.get_cached_doc("Site Plan", item.plan)
 			if not is_seat_based_plan(plan):
 				continue
-			price_symbol = get_currency_symbol(self.currency)
 			total = flt(item.amount, 2)
 			item.description = (
 				f"{getattr(plan, 'plan_title', None) or plan.name} — {cint(item.quantity)} seats × "
-				f"{price_symbol}{flt(item.rate or 0, 2):.2f} = {price_symbol}{total:.2f}"
+				f"{fmt_money(flt(item.rate or 0, 2), 2, self.currency)} = {fmt_money(total, 2, self.currency)}"
 			)
 
 		if hasattr(PressInvoice, "update_item_descriptions"):
