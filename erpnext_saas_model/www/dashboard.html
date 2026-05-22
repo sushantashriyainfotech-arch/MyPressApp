@@ -1,122 +1,34 @@
 <!DOCTYPE html>
 <html class="h-full overflow-hidden" lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+		<title>Frappe Cloud</title>
+		<link rel="icon" href="/assets/press/dashboard/favicon.png" type="image/x-icon" />
+		<script type="module" crossorigin src="{{ dashboard_js }}"></script>
+		<link rel="stylesheet" crossorigin href="{{ dashboard_css }}">
+	</head>
+	<body class="h-full">
+		<noscript>
+			<strong>
+				Frappe Cloud Dashboard doesn't work properly without JavaScript enabled.
+				Please enable it to continue.
+			</strong>
+		</noscript>
+		<!-- Main Vue App -->
+		<div id="app" class="h-full"></div>
+		<!-- For Teleports -->
+		<div id="modals"></div>
+		<div id="popovers"></div>
 
-<head>
-	<meta charset="utf-8" />
-	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-	<meta name="viewport" content="width=device-width,initial-scale=1.0" />
-	<title>Frappe Cloud</title>
-	<link rel="icon" href="/assets/press/dashboard/favicon.ico" type="image/x-icon" />
-	<script type="module" crossorigin src="/assets/press/dashboard/assets/index-BNBlLBKP.js"></script>
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/_plugin-vue_export-helper-6RpNe_VO.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/vue.runtime.esm-bundler-igu7vUSV.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/preload-helper-CLIvHwke.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/FeatherIcon-D7T1y6nz.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/LoadingIndicator-CSRXkaWr.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Primitive-BUBDczk2.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/PopperContent-DRcfzTNx.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/VisuallyHidden-5jzt0wNI.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Tooltip-CNLiowCm.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/vue-router-CwEGwZfn.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Button-cmZd9biM.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useId-HvvcKzCn.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Checkbox-sqOhcVRw.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/check-N2Wjhp7d.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/chevron-down-BJIElvrc.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useHideOthers-DInhRZ0F.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/ohash.D__AXeF1-C4eEi4OS.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/usePrimitiveElement-vOfh0bve.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Collection-CrYHPavS.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/utils-B1JS1a4k.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/VisuallyHiddenInput-DOHW-U8V.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useDirection-C-fO9IH8.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useNonce-5FM3IXGq.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Combobox-Da1zdPw6.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/FocusScope-6jtDsaYn.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useFocusGuards-DLJnVlZP.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Popover-Ddm7cAgi.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/utils-CntlSKZ0.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/nullish-ZQ_4Tom3.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Select-ChKb7hIr.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/debounce-blRrll4I.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/TextInput-Nz_s-9zu.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Textarea-IKQHn-P1.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/FormControl-Wj18TN7l.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/x-DqQnwhck.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Dialog-CrdQRpYP.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Dialog-Dx_V5Kun.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/ErrorMessage-DpNolR38.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/timezone-DKU3Y09o.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/dayjs-Bnq9KugM.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/config-zpbdjGJD.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/request-BAjvdgo9.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/resources-DmNJWvb9.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/listResource-DmBSXFpC.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/documentResource-P4lcb6jc.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/frappeRequest-DtYzsHKR.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/team-C22_mLOe.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/format-Bbng1rV0.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/vue-sonner-BMYitow1.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Link-B7p01dvP.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/LinkControl-_Ot2eU2a.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/components-Cj5EGagY.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/site-DFSGHoCs.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/common-PrrO5lPn.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/device-BRMH0cms.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/bench-CRJ6mWzL.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/flask-conical-xXcgmoIb.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/help-circle-DrGaxktY.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/refresh-ccw-v7izCRU9.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/search-D4m3E8Ph.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/TabButtons-D3XOzO-d.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/dayjs-DZCQ58Z2.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/core-C_2EvWeN.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Switch-D0y2SZpv.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/useArrowNavigation-CZQbcSYS.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Dropdown-D44X86SU.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/ActionButton-BlAz6XKY.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Badge-CErCVzsB.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Badge-BDpPiwzd.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/ObjectListCell-CIQqhVez.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/DateTimePicker-Wwdf-cPF.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/alert-triangle-CczYwQZ9.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/info-D88elyT_.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/AlertBanner-DC4sgJlr.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/DismissableBanner-CWB8Fssf.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/ObjectList-Bo827C0z.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/loader-circle-QRC4kGY2.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Spinner-Ck6SZqyP.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/Tabs-D3_mkoPL.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/badge-check-BWcYfiBh.js">
-	<link rel="modulepreload" crossorigin href="/assets/press/dashboard/assets/PlansCards-CgITqEuR.js">
-	<link rel="stylesheet" crossorigin href="/assets/press/dashboard/assets/Popover-WqQFOTYK.css">
-	<link rel="stylesheet" crossorigin href="/assets/press/dashboard/assets/Select-I3PQy5FR.css">
-	<link rel="stylesheet" crossorigin href="/assets/press/dashboard/assets/Dialog-BKashczs.css">
-	<link rel="stylesheet" crossorigin href="/assets/press/dashboard/assets/Dropdown-B7Mi1LXD.css">
-	<link rel="stylesheet" crossorigin href="/assets/press/dashboard/assets/index-CVdcM_UE.css">
-</head>
+		<script>
+			{% for key in boot %}
+			window["{{ key }}"] = {{ boot[key] | tojson }};
+			{% endfor %}
+		</script>
 
-<body class="h-full">
-	<noscript>
-		<strong>
-			Frappe Cloud Dashboard doesn't work properly without JavaScript enabled.
-			Please enable it to continue.
-		</strong>
-	</noscript>
-
-	<!-- Main Vue App -->
-	<div id="app" class="h-full"></div>
-
-	<!-- For Teleports -->
-	<div id="modals"></div>
-	<div id="popovers"></div>
-
-	<script>
-		{% for key in boot %}
-		window["{{ key }}"] = {{ boot[key] | tojson }};
-		{% endfor %}
-	</script>
-	<script src="/assets/erpnext_saas_model/js/seat_billing_runtime.js"></script>
-</body>
-
+		<!-- Seat Billing Runtime -->
+		<script src="/assets/erpnext_saas_model/js/seat_billing_runtime.js"></script>
+	</body>
 </html>
