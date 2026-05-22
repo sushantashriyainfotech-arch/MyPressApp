@@ -1,10 +1,7 @@
-# Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
-# For license information, please see license.txt
+import frappe
 
-
-import frappe 
 no_cache = 1
-def get_context(context):    
-	from press.www.dashboard 
-	import get_context as press_get_context    
-	return press_get_context()
+
+def get_context(context):
+    import press.www.dashboard as press_dashboard
+    return press_dashboard.get_context()
