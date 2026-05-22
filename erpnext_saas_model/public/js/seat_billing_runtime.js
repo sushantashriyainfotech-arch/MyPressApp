@@ -21,6 +21,15 @@
 		if (DEBUG) console.log('[Seat Billing]', ...args);
 	}
 
+	// ── Debounce helper ────────────────────────────────────────────────────────
+	function debounce(fn, delay) {
+		let timer;
+		return function (...args) {
+			clearTimeout(timer);
+			timer = setTimeout(() => fn.apply(this, args), delay);
+		};
+	}
+
 	function normalize(value) {
 		return String(value || '')
 			.toLowerCase()
@@ -44,26 +53,21 @@
 	}
 
 	function currencySymbol() {
-		// Use the symbol from the active currency, or fallback to the currency code itself
 		const currency = window.frappe?.boot?.sysdefaults?.currency || 'USD';
 		const symbols = window.frappe?.boot?.currency_symbols || {};
-		return symbols[currency] || currency; // e.g., Returns '€' for EUR, '£' for GBP, etc.
+		return symbols[currency] || currency;
 	}
 
 	function formatCurrency(value) {
 		const amount = Number(value || 0);
 		const symbol = currencySymbol();
-		
-		// If you want to use Frappe's standard currency formatting logic, 
-		// you can use the global format_currency if it's available:
+
 		if (window.format_currency) {
 			return window.format_currency(amount, window.frappe?.boot?.sysdefaults?.currency);
 		}
-		
-		// Manual fallback
+
 		return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 	}
-
 
 	function isSeatBased(plan) {
 		return plan && plan.billing_type === 'Seat Based';
@@ -110,9 +114,7 @@
 
 		const response = await fetch(
 			'/api/method/erpnext_saas_model.api.site.get_site_plans',
-			{
-				credentials: 'same-origin',
-			},
+			{ credentials: 'same-origin' },
 		);
 		const data = await response.json();
 		state.plans = Array.isArray(data.message) ? data.message : [];
@@ -174,8 +176,6 @@
 
 		state.panel.style.display = '';
 		state.billableSeats = clampSeats(plan, state.billableSeats);
-
-		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
 
 		state.panel.innerHTML = `
 			<div class="flex items-start justify-between gap-4">
@@ -266,8 +266,7 @@
 		};
 
 		state.panel.querySelector('[data-role="seat-range"]').textContent = seatRangeText;
-		state.panel.querySelector('[data-role="seat-total"]').textContent =
-			formatCurrency(total);
+		state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(total);
 
 		const warningEl = state.panel.querySelector('[data-role="seat-warning"]');
 		warningEl.textContent = warningText;
@@ -278,7 +277,17 @@
 		input.oninput = () => {
 			state.billableSeats = clampSeats(plan, input.value);
 			input.value = String(state.billableSeats);
-			renderPanel();
+			// Update totals in-place without full re-render to avoid loop
+			const newTotal = Number(state.billableSeats) * Number(plan.price_per_seat || 0);
+			state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(newTotal);
+			const newWarning = shouldShowWarning(plan, state.billableSeats)
+				? plan.next_plan
+					? `This plan supports up to ${maxSeats} seats. Consider upgrading to ${plan.next_plan}.`
+					: `This plan supports up to ${maxSeats} seats.`
+				: '';
+			const w = state.panel.querySelector('[data-role="seat-warning"]');
+			w.textContent = newWarning;
+			w.style.display = newWarning ? '' : 'none';
 		};
 
 		if (!state.panel.isConnected) {
@@ -286,34 +295,37 @@
 		}
 	}
 
+	// ── Fixed: only re-render when plan actually changes ──────────────────────
 	function refreshSelection() {
 		if (!state.planGrid) return;
 		log('Refreshing selection...');
 		const selected = getSelectedPlanFromGrid(state.planGrid);
+
 		if (selected) {
 			log('Current selection:', selected.name);
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
 				state.billableSeats = clampSeats(selected, 1);
-				state.step = 1; // Reset step on plan change
+				state.step = 1;
 				log('Plan changed to:', selected.name);
+				renderPanel(); // Only render on actual plan change
 			}
 		} else {
 			log('No plan selected');
-			state.selectedPlan = null;
-			state.step = 1;
+			if (state.selectedPlan !== null) {
+				state.selectedPlan = null;
+				state.step = 1;
+				renderPanel(); // Only render on actual change
+			}
 		}
-		renderPanel();
 	}
 
 	function findPlanGrid() {
-		// Look inside dialogs first
 		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
 		for (const dialog of dialogs) {
 			const grid = findGridInContainer(dialog);
 			if (grid) return grid;
 		}
-
 		return findGridInContainer(document.body);
 	}
 
@@ -362,10 +374,8 @@
 			state.planGrid = grid;
 			bindPlanGrid(grid);
 			refreshSelection();
-		} else {
-			// Periodically refresh selection in case classes changed without a click (e.g. initial load)
-			refreshSelection();
 		}
+		// Removed: periodic refreshSelection() call here — was causing the loop
 	}
 
 	function updateRequestBody(url, body) {
@@ -464,34 +474,6 @@
 		};
 	}
 
-	function observe() {
-		const refresh = () => {
-			maybeMount();
-			interceptDialogButtons();
-		};
-
-		const observer = new MutationObserver(refresh);
-		observer.observe(document.documentElement, {
-			childList: true,
-			subtree: true,
-		});
-
-		window.addEventListener('popstate', refresh);
-		window.addEventListener('erpnext-seat-billing:navigation', refresh);
-
-		const originalPushState = history.pushState;
-		const originalReplaceState = history.replaceState;
-
-		history.pushState = function () {
-			originalPushState.apply(this, arguments);
-			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-		};
-		history.replaceState = function () {
-			originalReplaceState.apply(this, arguments);
-			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-		};
-	}
-
 	function interceptDialogButtons() {
 		if (!isSeatBased(state.selectedPlan)) return;
 
@@ -514,6 +496,46 @@
 				}
 			}
 		}
+	}
+
+	// ── Fixed: debounced observer that ignores our own panel mutations ─────────
+	function observe() {
+		const refresh = debounce(() => {
+			maybeMount();
+			interceptDialogButtons();
+		}, 150);
+
+		const observer = new MutationObserver((mutations) => {
+			// Ignore mutations caused by our own panel to prevent infinite render loop
+			const isOwnMutation = mutations.every(m =>
+				state.panel && (
+					state.panel.contains(m.target) ||
+					m.target === state.panel
+				)
+			);
+			if (isOwnMutation) return;
+			refresh();
+		});
+
+		observer.observe(document.documentElement, {
+			childList: true,
+			subtree: true,
+		});
+
+		window.addEventListener('popstate', refresh);
+		window.addEventListener('erpnext-seat-billing:navigation', refresh);
+
+		const originalPushState = history.pushState;
+		const originalReplaceState = history.replaceState;
+
+		history.pushState = function () {
+			originalPushState.apply(this, arguments);
+			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
+		};
+		history.replaceState = function () {
+			originalReplaceState.apply(this, arguments);
+			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
+		};
 	}
 
 	async function init() {
