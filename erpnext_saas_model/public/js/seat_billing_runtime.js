@@ -1,4 +1,6 @@
 (function () {
+	// Load once per page. The runtime is injected after the dashboard boot data,
+	// then waits for DOM readiness before wiring itself into the page.
 	if (window.__erpnextSeatBillingRuntimeLoaded) return;
 	window.__erpnextSeatBillingRuntimeLoaded = true;
 	console.log('[Seat Billing] Script initialized');
@@ -37,6 +39,7 @@
 	}
 
 	function isRelevantRoute() {
+		// First gate: only activate on pages that look like seat-billing flows.
 		const path = window.location.pathname || '';
 		log('Checking route:', path);
 		if (ROUTE_HINTS.some((hint) => path.includes(hint))) {
@@ -52,21 +55,36 @@
 		);
 	}
 
-	function currencySymbol() {
-		const currency = window.frappe?.boot?.sysdefaults?.currency || 'USD';
+	function getCurrencyCode() {
+		const currency =
+			window.frappe?.boot?.team?.currency ||
+			window.frappe?.boot?.team_currency ||
+			window.frappe?.boot?.currency ||
+			window.frappe?.boot?.sysdefaults?.currency ||
+			window.frappe?.session?.currency ||
+			'USD';
 		const symbols = window.frappe?.boot?.currency_symbols || {};
 		return symbols[currency] || currency;
 	}
 
 	function formatCurrency(value) {
 		const amount = Number(value || 0);
-		const symbol = currencySymbol();
+		const currency = getCurrencyCode();
 
 		if (window.format_currency) {
-			return window.format_currency(amount, window.frappe?.boot?.sysdefaults?.currency);
+			return window.format_currency(amount, currency);
 		}
 
-		return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+		try {
+			return new Intl.NumberFormat(undefined, {
+				style: 'currency',
+				currency,
+				currencyDisplay: 'symbol',
+			}).format(amount);
+		} catch (error) {
+			const symbol = window.frappe?.boot?.currency_symbols?.[currency] || currency;
+			return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+		}
 	}
 
 	function isSeatBased(plan) {
@@ -110,6 +128,7 @@
 	}
 
 	async function loadPlans() {
+		// Second gate: fetch plan data before we try to match the selected plan.
 		if (state.plans.length) return state.plans;
 
 		const response = await fetch(
@@ -146,6 +165,8 @@
 	}
 
 	function renderPanel() {
+		// Rendering always flows through one of two steps:
+		// step 1 = plan selected, step 2 = seat configuration.
 		if (!state.planGrid) return;
 		if (!state.panel) {
 			state.panel = document.createElement('div');
@@ -162,39 +183,11 @@
 	}
 
 	function renderStep1() {
+		// Step 1 keeps the plan grid visible and hides the seat editor panel.
+		// This is the default state for non-seat-based plans.
 		if (!state.panel) return;
 		state.planGrid.style.display = '';
-
-		const plan = state.selectedPlan;
-		if (!isSeatBased(plan)) {
-			state.panel.style.display = 'none';
-			if (!state.panel.isConnected) {
-				state.planGrid.insertAdjacentElement('afterend', state.panel);
-			}
-			return;
-		}
-
-		state.panel.style.display = '';
-		state.billableSeats = clampSeats(plan, state.billableSeats);
-
-		state.panel.innerHTML = `
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<div class="text-sm font-medium text-ink-gray-9">Seat billing available</div>
-					<div class="text-xs text-ink-gray-6">Custom seat pricing will be applied in the next step.</div>
-				</div>
-				<div class="text-right">
-					<button class="bg-surface-white border border-outline-gray-3 rounded px-3 py-1.5 text-sm font-medium hover:bg-surface-gray-1 transition-colors" data-role="next-step">
-						Configure Seats
-					</button>
-				</div>
-			</div>
-		`;
-
-		state.panel.querySelector('[data-role="next-step"]').onclick = () => {
-			state.step = 2;
-			renderPanel();
-		};
+		state.panel.style.display = 'none';
 
 		if (!state.panel.isConnected) {
 			state.planGrid.insertAdjacentElement('afterend', state.panel);
@@ -202,9 +195,10 @@
 	}
 
 	function renderStep2() {
+		// Step 2 shows the seat editor while keeping the plan grid visible.
 		if (!state.panel) return;
 
-		state.planGrid.style.display = 'none';
+		state.planGrid.style.display = '';
 		state.panel.style.display = '';
 
 		const plan = state.selectedPlan;
@@ -297,6 +291,7 @@
 
 	// ── Fixed: only re-render when plan actually changes ──────────────────────
 	function refreshSelection() {
+		// Re-read the selected plan from the grid after clicks, navigation, or DOM changes.
 		if (!state.planGrid) return;
 		log('Refreshing selection...');
 		const selected = getSelectedPlanFromGrid(state.planGrid);
@@ -306,9 +301,13 @@
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
 				state.billableSeats = clampSeats(selected, 1);
-				state.step = 1;
+				state.step = isSeatBased(selected) ? 2 : 1;
 				log('Plan changed to:', selected.name);
 				renderPanel(); // Only render on actual plan change
+			}
+			if (state.selectedPlan && isSeatBased(state.selectedPlan) && state.step !== 2) {
+				state.step = 2;
+				renderPanel();
 			}
 		} else {
 			log('No plan selected');
@@ -321,6 +320,7 @@
 	}
 
 	function findPlanGrid() {
+		// Search dialogs first because the plan picker usually lives inside a modal.
 		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
 		for (const dialog of dialogs) {
 			const grid = findGridInContainer(dialog);
@@ -345,6 +345,8 @@
 	}
 
 	function bindPlanGrid(grid) {
+		// A single capturing click listener is enough; it schedules a selection refresh
+		// after the UI has updated its active-button state.
 		if (!grid || grid.dataset.erpSeatBillingBound === '1') return;
 		grid.dataset.erpSeatBillingBound = '1';
 		log('Binding to plan grid');
@@ -359,6 +361,8 @@
 	}
 
 	function maybeMount() {
+		// Mounting is idempotent: if the page is relevant and a plan grid exists,
+		// attach to it and sync the current selection.
 		if (!isRelevantRoute()) return;
 		const grid = findPlanGrid();
 		if (!grid) {
@@ -379,6 +383,8 @@
 	}
 
 	function updateRequestBody(url, body) {
+		// Network hook: when the app submits a seat-based plan change, inject
+		// the current billable seat count into the request payload.
 		if (!body) return body;
 
 		let parsed = body;
@@ -418,6 +424,7 @@
 	}
 
 	function patchFetch() {
+		// Patch fetch first so any later app requests pass through the seat injector.
 		if (window.__erpnextSeatBillingFetchPatched) return;
 		window.__erpnextSeatBillingFetchPatched = true;
 		const originalFetch = window.fetch.bind(window);
@@ -446,6 +453,7 @@
 	}
 
 	function patchXhr() {
+		// Patch XHR as well because the dashboard may use either transport.
 		if (window.__erpnextSeatBillingXhrPatched) return;
 		window.__erpnextSeatBillingXhrPatched = true;
 
@@ -475,6 +483,8 @@
 	}
 
 	function interceptDialogButtons() {
+		// While step 1 is active, keep the primary plan action disabled until seats
+		// have been configured.
 		if (!isSeatBased(state.selectedPlan)) return;
 
 		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
@@ -500,6 +510,8 @@
 
 	// ── Fixed: debounced observer that ignores our own panel mutations ─────────
 	function observe() {
+		// Start the background watchers before the first mount so we catch late DOM
+		// inserts, route changes, and history navigation.
 		const refresh = debounce(() => {
 			maybeMount();
 			interceptDialogButtons();
@@ -539,6 +551,11 @@
 	}
 
 	async function init() {
+		// Boot order:
+		// 1) patch request transport
+		// 2) start observers
+		// 3) fetch plans
+		// 4) mount into the current page state
 		patchFetch();
 		patchXhr();
 		observe();
@@ -554,8 +571,10 @@
 	}
 
 	if (document.readyState === 'loading') {
+		// Defer startup until the dashboard DOM exists.
 		document.addEventListener('DOMContentLoaded', init, { once: true });
 	} else {
+		// If the DOM is already ready, initialize immediately.
 		init();
 	}
 })();
