@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint
 
+from press.api.client import dashboard_whitelist
 from press.press.doctype.site.site import Site as PressSite
 
 from erpnext_saas_model.seat_billing import (
@@ -52,6 +53,7 @@ class Site(PressSite):
 				)
 			frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
 
+	@dashboard_whitelist()
 	def set_plan(self, plan: None | str = None, billable_seats: int | None = None):
 		"""
 		Helper to update both the plan and the billable seat count atomically.
