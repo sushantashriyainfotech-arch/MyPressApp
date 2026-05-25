@@ -71,8 +71,6 @@ class Site(PressSite):
 
 			if billable_seats is not None and self.name:
 				self.billable_seats = cint(billable_seats)
-			result = self.change_plan(plan)
-			if billable_seats is not None and self.name:
 				frappe.db.set_value(
 					"Site",
 					self.name,
@@ -80,6 +78,7 @@ class Site(PressSite):
 					self.billable_seats,
 					update_modified=False,
 				)
+			result = self.change_plan(plan)
 			return result
 
 		if billable_seats is not None and self.name:
