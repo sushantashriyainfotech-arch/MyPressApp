@@ -71,11 +71,25 @@ class Site(PressSite):
 
 			if billable_seats is not None and self.name:
 				self.billable_seats = cint(billable_seats)
-				frappe.db.set_value("Site", self.name, "billable_seats", self.billable_seats)
-			return self.change_plan(plan)
+			result = self.change_plan(plan)
+			if billable_seats is not None and self.name:
+				frappe.db.set_value(
+					"Site",
+					self.name,
+					"billable_seats",
+					self.billable_seats,
+					update_modified=False,
+				)
+			return result
 
 		if billable_seats is not None and self.name:
 			self.billable_seats = cint(billable_seats)
-			frappe.db.set_value("Site", self.name, "billable_seats", self.billable_seats)
+			frappe.db.set_value(
+				"Site",
+				self.name,
+				"billable_seats",
+				self.billable_seats,
+				update_modified=False,
+			)
 
 		return super().set_plan(plan)
