@@ -132,7 +132,7 @@
 		if (state.plans.length) return state.plans;
 
 		const response = await fetch(
-			'/api/method/erpnext_saas_model.api.site.get_site_plans',
+			'/api/method/press.api.site.get_site_plans',
 			{ credentials: 'same-origin' },
 		);
 		const data = await response.json();
