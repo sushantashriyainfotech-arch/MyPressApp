@@ -407,12 +407,20 @@
 		if (!isSeatBased(plan)) return body;
 
 		const seats = clampSeats(plan, state.billableSeats);
+		const effectivePriceUsd = getEffectiveSeatPrice(plan, seats);
+		if (!parsed.args || typeof parsed.args !== 'object') {
+			parsed.args = {};
+		}
 		if (parsed.site) {
 			parsed.site.billable_seats = seats;
+			parsed.site.price_usd = effectivePriceUsd;
 		}
 		if (parsed.doc && parsed.doc.doctype === 'Site') {
 			parsed.doc.billable_seats = seats;
+			parsed.doc.price_usd = effectivePriceUsd;
 		}
+		parsed.args.billable_seats = seats;
+		parsed.args.price_usd = effectivePriceUsd;
 		if (parsed.plan && !parsed.billable_seats) {
 			parsed.billable_seats = seats;
 		}

@@ -27,10 +27,10 @@ def get_site_plans():
 
 
 @frappe.whitelist()
-def change_plan(name, plan, billable_seats=None):
+def change_plan(name, plan, billable_seats=None, price_usd=None):
 	site = frappe.get_doc("Site", name)
 	if billable_seats is not None:
-		site.set_plan(plan, billable_seats=billable_seats)
+		site.set_plan(plan, billable_seats=billable_seats, price_usd=price_usd)
 		return
 
 	return change_press_plan(name, plan)

@@ -54,11 +54,26 @@ class Site(PressSite):
 			frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
 
 	@dashboard_whitelist()
-	def set_plan(self, plan: None | str = None, billable_seats: int | None = None):
+	def set_plan(
+		self,
+		plan: None | str = None,
+		billable_seats: int | None = None,
+		price_usd: float | None = None,
+	):
 		"""
 		Helper to update both the plan and the billable seat count atomically.
 		Updates the database directly for immediate reflection in the UI.
 		"""
+		plan_doc = frappe.get_cached_doc("Site Plan", plan) if plan else None
+		if plan_doc and is_seat_based_plan(plan_doc):
+			if billable_seats is None:
+				billable_seats = cint(getattr(self, "billable_seats", 0) or getattr(plan_doc, "min_seats", 1))
+
+			if billable_seats is not None and self.name:
+				self.billable_seats = cint(billable_seats)
+				frappe.db.set_value("Site", self.name, "billable_seats", self.billable_seats)
+			return self.change_plan(plan)
+
 		if billable_seats is not None and self.name:
 			self.billable_seats = cint(billable_seats)
 			frappe.db.set_value("Site", self.name, "billable_seats", self.billable_seats)

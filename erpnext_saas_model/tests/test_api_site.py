@@ -18,7 +18,18 @@ class TestSiteApi(FrappeTestCase):
 			api_site.change_plan("SITE-001", "PLAN-001", billable_seats=4)
 
 		get_doc.assert_called_once_with("Site", "SITE-001")
-		site.set_plan.assert_called_once_with("PLAN-001", billable_seats=4)
+		site.set_plan.assert_called_once_with("PLAN-001", billable_seats=4, price_usd=None)
+		fallback.assert_not_called()
+
+	def test_change_plan_forwards_price_usd(self):
+		site = SimpleNamespace(set_plan=Mock())
+
+		with patch.object(api_site.frappe, "get_doc", return_value=site), patch.object(
+			api_site, "change_press_plan"
+		) as fallback:
+			api_site.change_plan("SITE-001", "PLAN-001", billable_seats=4, price_usd=42)
+
+		site.set_plan.assert_called_once_with("PLAN-001", billable_seats=4, price_usd=42)
 		fallback.assert_not_called()
 
 	def test_change_plan_falls_back_without_seats(self):
