@@ -431,6 +431,12 @@
 		// Mounting is idempotent: if the page is relevant and a plan grid exists,
 		// attach to it and sync the current selection.
 		if (!isRelevantRoute()) return;
+
+		// Lazy Patching: only arm the network stack interception once we enter
+		// a relevant seat-billing flow.
+		patchFetch();
+		patchXhr();
+
 		const grid = findPlanGrid();
 		if (!grid) {
 			if (state.planGrid) log('Plan grid lost');
@@ -693,12 +699,9 @@
 
 	async function init() {
 		// Boot order:
-		// 1) patch request transport
-		// 2) start observers
-		// 3) fetch plans
-		// 4) mount into the current page state
-		patchFetch();
-		patchXhr();
+		// 1) start observers (these watch for route changes to arm the script)
+		// 2) fetch plans
+		// 3) mount into the current page state (trigging lazy patching if route is relevant)
 		observe();
 
 		try {
