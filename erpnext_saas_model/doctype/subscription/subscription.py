@@ -157,6 +157,7 @@ class Subscription(PressSubscription):
 		# Inform the managed site about the new seat count
 		sync_site_access(self)
 
+	@frappe.whitelist()
 	def create_usage_record(self, date=None):
 		"""
 		Daily billing snapshot record (Usage Record).
@@ -184,7 +185,8 @@ class Subscription(PressSubscription):
 			backfill_missing_seat_usage_records(self, date)
 
 		return create_seat_usage_record(self, date=date, force=True)
-
+	
+	@frappe.whitelist()
 	def update_billable_seats(self, new_seats: int):
 		"""
 		Whitelisted API method to update seat count from the frontend/dashboard.
