@@ -492,7 +492,78 @@
 			nestedDocs?.subscription_plan ||
 			nestedDocs?.plan;
 		const plan = findPlanByName(planName);
-		if (!isSeatBased(plan)) return body;
+		
+		// For non-seat-based plans, ensure we don't send stale seat billing data.
+		if (!isSeatBased(plan)) {
+			if (bodyIsSearchParams) {
+				parsed.delete('billable_seats');
+				parsed.delete('price_usd');
+				const args = parseMaybeJSON(parsed.get('args'));
+				if (args) {
+					delete args.billable_seats;
+					delete args.price_usd;
+					parsed.set('args', JSON.stringify(args));
+				}
+				const docs = parseMaybeJSON(parsed.get('docs'));
+				if (docs) {
+					delete docs.billable_seats;
+					delete docs.price_usd;
+					parsed.set('docs', JSON.stringify(docs));
+				}
+				return parsed.toString();
+			}
+
+			if (bodyIsFormData) {
+				parsed.delete('billable_seats');
+				parsed.delete('price_usd');
+				const args = parseMaybeJSON(parsed.get('args'));
+				if (args) {
+					delete args.billable_seats;
+					delete args.price_usd;
+					parsed.set('args', JSON.stringify(args));
+				}
+				const docs = parseMaybeJSON(parsed.get('docs'));
+				if (docs) {
+					delete docs.billable_seats;
+					delete docs.price_usd;
+					parsed.set('docs', JSON.stringify(docs));
+				}
+				return parsed;
+			}
+
+			if (bodyIsString) {
+				try {
+					const obj = JSON.parse(body);
+					delete obj.billable_seats;
+					delete obj.price_usd;
+					if (obj.args) {
+						delete obj.args.billable_seats;
+						delete obj.args.price_usd;
+					}
+					if (obj.doc) {
+						delete obj.doc.billable_seats;
+						delete obj.doc.price_usd;
+					}
+					if (obj.site) {
+						delete obj.site.billable_seats;
+						delete obj.site.price_usd;
+					}
+					return JSON.stringify(obj);
+				} catch (e) {
+					return body;
+				}
+			}
+
+			// For literal objects, we should clone to avoid mutating the original reference
+			const cloned = JSON.parse(JSON.stringify(parsed));
+			delete cloned.billable_seats;
+			delete cloned.price_usd;
+			if (cloned.args) {
+				delete cloned.args.billable_seats;
+				delete cloned.args.price_usd;
+			}
+			return cloned;
+		}
 
 		const seats = clampSeats(plan, state.billableSeats);
 		const effectivePriceUsd = getEffectiveSeatPrice(plan, seats);

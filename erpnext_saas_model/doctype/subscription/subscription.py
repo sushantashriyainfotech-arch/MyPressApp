@@ -11,6 +11,7 @@ from erpnext_saas_model.seat_billing import (
 	get_active_user_count,
 	get_billing_effective_from,
 	get_plan_price_per_seat,
+	get_plan_total_price,
 	get_subscription_seat_context,
 	is_seat_based_plan,
 	log_seat_change,
@@ -52,12 +53,12 @@ class Subscription(PressSubscription):
 		seed_seats = self._get_seed_billable_seats(plan)
 		return max(current_seats, seed_seats)
 
-	def _clear_seat_billing_fields(self) -> None:
+	def _clear_seat_billing_fields(self, plan=None) -> None:
 		"""Reset seat-billing fields when the subscription is no longer seat-based."""
-		self.billable_seats = None
-		self.price_per_seat = None
-		self.total_amount = None
-		self.seats_last_updated = None
+		self.billable_seats = 1
+		self.price_per_seat = 0
+		self.total_amount = get_plan_total_price(plan) if plan else 0
+		self.seats_last_updated = now_datetime()
 
 	def before_validate(self):
 		"""
@@ -72,7 +73,7 @@ class Subscription(PressSubscription):
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
-			self._clear_seat_billing_fields()
+			self._clear_seat_billing_fields(plan)
 			return
 
 		# Keep subscription seats at or above the site's billed seat count

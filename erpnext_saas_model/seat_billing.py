@@ -21,8 +21,27 @@ def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
 	if isinstance(plan, dict):
 		return plan.get("billing_type") == "Seat Based"
 
+	if hasattr(plan, "billing_type"):
+		return plan.billing_type == "Seat Based"
+
 	billing_type = frappe.db.get_value("Site Plan", plan, "billing_type")
 	return billing_type == "Seat Based"
+
+
+def get_plan_total_price(plan: str | dict[str, Any] | None) -> float:
+	"""
+	Returns the base price of a Site Plan.
+	For seat-based plans, this is usually 0 (since it's per-seat).
+	For resource-based plans, this is the fixed price of the plan.
+	"""
+	if not plan:
+		return 0.0
+
+	if isinstance(plan, str):
+		plan = frappe.get_cached_doc("Site Plan", plan)
+
+	price = getattr(plan, "total_price", None) or getattr(plan, "amount", 0)
+	return flt(price, 2)
 
 
 def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
