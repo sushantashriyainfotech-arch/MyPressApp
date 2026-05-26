@@ -143,6 +143,7 @@ override_doctype_class = {
 	"Subscription": ["erpnext_saas_model.doctype.subscription.subscription.Subscription"],
 	"Usage Record": ["erpnext_saas_model.doctype.usage_record.usage_record.UsageRecord"],
 	"Invoice": ["erpnext_saas_model.doctype.invoice.invoice.Invoice"],
+	"Seat Change Log": ["erpnext_saas_model.doctype.seat_change_log.seat_change_log.SeatChangeLog"],
 }
 
 # Document Events

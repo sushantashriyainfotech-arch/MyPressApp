@@ -1,0 +1,2 @@
+from erpnext_saas_model.doctype.seat_change_log.seat_change_log import SeatChangeLog
+
