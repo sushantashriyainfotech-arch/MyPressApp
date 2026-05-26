@@ -164,6 +164,54 @@
 		return Boolean(maxSeats && Number(seats || 0) > maxSeats);
 	}
 
+	function getEffectiveSeatPrice(plan, seats) {
+		return Number(plan?.price_per_seat || 0) * Number(seats || 0);
+	}
+
+	function parseMaybeJSON(value) {
+		if (value == null || value === '') return null;
+		if (typeof value === 'object') return value;
+
+		try {
+			return JSON.parse(value);
+		} catch (error) {
+			return null;
+		}
+	}
+
+	function updateSeatBillingPayloadObject(payload, seats, effectivePriceUsd) {
+		if (!payload || typeof payload !== 'object') return false;
+
+		let mutated = false;
+		if (payload.site && typeof payload.site === 'object') {
+			payload.site.billable_seats = seats;
+			payload.site.price_usd = effectivePriceUsd;
+			mutated = true;
+		}
+		if (payload.doc && payload.doc.doctype === 'Site' && typeof payload.doc === 'object') {
+			payload.doc.billable_seats = seats;
+			payload.doc.price_usd = effectivePriceUsd;
+			mutated = true;
+		}
+		if (!payload.args || typeof payload.args !== 'object') {
+			payload.args = {};
+		}
+		payload.args.billable_seats = seats;
+		payload.args.price_usd = effectivePriceUsd;
+		mutated = true;
+
+		if (payload.plan && !payload.billable_seats) {
+			payload.billable_seats = seats;
+			mutated = true;
+		}
+		if (payload.subscription_plan && !payload.billable_seats) {
+			payload.billable_seats = seats;
+			mutated = true;
+		}
+
+		return mutated;
+	}
+
 	function renderPanel() {
 		// Rendering always flows through one of two steps:
 		// step 1 = plan selected, step 2 = seat configuration.
@@ -387,48 +435,108 @@
 		// the current billable seat count into the request payload.
 		if (!body) return body;
 
+		const bodyIsString = typeof body === 'string';
+		const bodyIsSearchParams = typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams;
+		const bodyIsFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 		let parsed = body;
-		if (typeof body === 'string') {
+
+		if (bodyIsString) {
 			try {
 				parsed = JSON.parse(body);
 			} catch (error) {
-				return body;
+				parsed = new URLSearchParams(body);
 			}
-		} else if (typeof body !== 'object') {
+		} else if (!bodyIsSearchParams && !bodyIsFormData && typeof body !== 'object') {
 			return body;
 		}
+
+		const nestedArgs = parseMaybeJSON(
+			bodyIsSearchParams ? parsed.get('args') : parsed?.args,
+		);
+		const nestedDocs = parseMaybeJSON(
+			bodyIsSearchParams ? parsed.get('docs') : parsed?.docs,
+		);
 
 		let planName =
 			parsed?.site?.plan ||
 			parsed?.plan ||
 			parsed?.doc?.subscription_plan ||
-			parsed?.doc?.plan;
+			parsed?.doc?.plan ||
+			nestedArgs?.plan ||
+			nestedArgs?.subscription_plan ||
+			nestedDocs?.subscription_plan ||
+			nestedDocs?.plan;
 		const plan = findPlanByName(planName);
 		if (!isSeatBased(plan)) return body;
 
 		const seats = clampSeats(plan, state.billableSeats);
 		const effectivePriceUsd = getEffectiveSeatPrice(plan, seats);
-		if (!parsed.args || typeof parsed.args !== 'object') {
-			parsed.args = {};
-		}
-		if (parsed.site) {
-			parsed.site.billable_seats = seats;
-			parsed.site.price_usd = effectivePriceUsd;
-		}
-		if (parsed.doc && parsed.doc.doctype === 'Site') {
-			parsed.doc.billable_seats = seats;
-			parsed.doc.price_usd = effectivePriceUsd;
-		}
-		parsed.args.billable_seats = seats;
-		parsed.args.price_usd = effectivePriceUsd;
-		if (parsed.plan && !parsed.billable_seats) {
-			parsed.billable_seats = seats;
-		}
-		if (parsed.subscription_plan && !parsed.billable_seats) {
-			parsed.billable_seats = seats;
+
+		if (bodyIsSearchParams) {
+			let mutated = false;
+			if (nestedArgs) {
+				nestedArgs.billable_seats = seats;
+				nestedArgs.price_usd = effectivePriceUsd;
+				parsed.set('args', JSON.stringify(nestedArgs));
+				mutated = true;
+			}
+			if (nestedDocs && nestedDocs.doctype === 'Site') {
+				nestedDocs.billable_seats = seats;
+				nestedDocs.price_usd = effectivePriceUsd;
+				parsed.set('docs', JSON.stringify(nestedDocs));
+				mutated = true;
+			}
+			if (!mutated) return body;
+			return parsed.toString();
 		}
 
-		return typeof body === 'string' ? JSON.stringify(parsed) : parsed;
+		if (bodyIsFormData) {
+			let mutated = false;
+			if (nestedArgs) {
+				nestedArgs.billable_seats = seats;
+				nestedArgs.price_usd = effectivePriceUsd;
+				parsed.set('args', JSON.stringify(nestedArgs));
+				mutated = true;
+			}
+			if (nestedDocs && nestedDocs.doctype === 'Site') {
+				nestedDocs.billable_seats = seats;
+				nestedDocs.price_usd = effectivePriceUsd;
+				parsed.set('docs', JSON.stringify(nestedDocs));
+				mutated = true;
+			}
+			return mutated ? parsed : body;
+		}
+
+		if (bodyIsString) {
+			if (typeof parsed === 'string') {
+				return body;
+			}
+
+			if (parsed instanceof URLSearchParams) {
+				let mutated = false;
+				if (nestedArgs) {
+					nestedArgs.billable_seats = seats;
+					nestedArgs.price_usd = effectivePriceUsd;
+					parsed.set('args', JSON.stringify(nestedArgs));
+					mutated = true;
+				}
+				if (nestedDocs && nestedDocs.doctype === 'Site') {
+					nestedDocs.billable_seats = seats;
+					nestedDocs.price_usd = effectivePriceUsd;
+					parsed.set('docs', JSON.stringify(nestedDocs));
+					mutated = true;
+				}
+				return mutated ? parsed.toString() : body;
+			}
+
+			const cloned = JSON.parse(JSON.stringify(parsed));
+			if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceUsd)) return body;
+			return JSON.stringify(cloned);
+		}
+
+		const cloned = parsed;
+		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceUsd)) return body;
+		return cloned;
 	}
 
 	function patchFetch() {
@@ -447,6 +555,7 @@
 				if (
 					url.includes('press.api.site.new') ||
 					url.includes('press.api.client.insert') ||
+					url.includes('press.api.client.run_doc_method') ||
 					url.includes('set_plan') ||
 					url.includes('change_plan')
 				) {
@@ -476,6 +585,7 @@
 		XMLHttpRequest.prototype.send = function (body) {
 			try {
 				if (
+					(this.__erpnextSeatBillingUrl || '').includes('press.api.client.run_doc_method') ||
 					(this.__erpnextSeatBillingUrl || '').includes('set_plan') ||
 					(this.__erpnextSeatBillingUrl || '').includes('change_plan') ||
 					(this.__erpnextSeatBillingUrl || '').includes('press.api.site.new') ||
