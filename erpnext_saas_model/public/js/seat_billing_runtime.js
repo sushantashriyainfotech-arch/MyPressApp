@@ -16,6 +16,7 @@
 	};
 
 	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
+	const EXCLUDED_ROUTE_HINTS = ['/dashboard/create-site/*']; // Add routes here to stop the script from running
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
 	const DEBUG = true; // Set to false in production
 
@@ -38,8 +39,26 @@
 			.replace(/[^a-z0-9]+/g, '');
 	}
 
+	function isExcludedRoute() {
+		const path = window.location.pathname || '';
+		return EXCLUDED_ROUTE_HINTS.some((hint) => {
+			if (hint.includes('*')) {
+				// Convert wildcard * to regex .* and escape other special chars
+				const escaped = hint.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+				const regex = new RegExp('^' + escaped + '$');
+				return regex.test(path);
+			}
+			return path.includes(hint);
+		});
+	}
+
 	function isRelevantRoute() {
 		// First gate: only activate on pages that look like seat-billing flows.
+		if (isExcludedRoute()) {
+			log('Route is excluded');
+			return false;
+		}
+
 		const path = window.location.pathname || '';
 		log('Checking route:', path);
 		if (ROUTE_HINTS.some((hint) => path.includes(hint))) {
@@ -546,6 +565,8 @@
 		const originalFetch = window.fetch.bind(window);
 		window.fetch = function (input, init) {
 			try {
+				if (isExcludedRoute()) return originalFetch(input, init);
+
 				const url =
 					typeof input === 'string'
 						? input
@@ -584,6 +605,8 @@
 
 		XMLHttpRequest.prototype.send = function (body) {
 			try {
+				if (isExcludedRoute()) return originalSend.call(this, body);
+
 				if (
 					(this.__erpnextSeatBillingUrl || '').includes('press.api.client.run_doc_method') ||
 					(this.__erpnextSeatBillingUrl || '').includes('set_plan') ||
