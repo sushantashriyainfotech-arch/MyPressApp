@@ -179,10 +179,7 @@ class Subscription(PressSubscription):
 		if not is_seat_based_plan(plan):
 			return super().create_usage_record(date=date)
 
-		if not date:
-			return None
-
-		date = frappe.utils.getdate(date)
+		date = frappe.utils.getdate(date or frappe.utils.today())
 		
 		# Standard Press usage collection happens once a day (after 6 PM)
 		if date == frappe.utils.getdate() and frappe.utils.now_datetime().time().hour < 18:
