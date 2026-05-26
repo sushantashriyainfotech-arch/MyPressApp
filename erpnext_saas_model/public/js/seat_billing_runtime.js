@@ -83,6 +83,7 @@
 			window.frappe?.session?.currency ||
 			'USD';
 
+			log('w', window);
 			log('w-f', window?.frappe);
 			log('w-f-b'. window?.frappe?.boot);
 
