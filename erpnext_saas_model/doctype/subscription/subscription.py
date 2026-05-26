@@ -52,6 +52,13 @@ class Subscription(PressSubscription):
 		seed_seats = self._get_seed_billable_seats(plan)
 		return max(current_seats, seed_seats)
 
+	def _clear_seat_billing_fields(self) -> None:
+		"""Reset seat-billing fields when the subscription is no longer seat-based."""
+		self.billable_seats = None
+		self.price_per_seat = None
+		self.total_amount = None
+		self.seats_last_updated = None
+
 	def before_validate(self):
 		"""
 		Preprocessing before standard validation.
@@ -65,6 +72,7 @@ class Subscription(PressSubscription):
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
+			self._clear_seat_billing_fields()
 			return
 
 		# Keep subscription seats at or above the site's billed seat count
