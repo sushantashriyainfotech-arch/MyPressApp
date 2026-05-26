@@ -365,11 +365,14 @@ def log_seat_change(
 	access_updated_at = access_updated_at or now_datetime()
 	billing_effective_from = billing_effective_from or get_billing_effective_from(access_updated_at)
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
+	site_name = subscription_doc.site or (
+		subscription_doc.document_name if subscription_doc.document_type == "Site" else None
+	)
 	seat_change = frappe.get_doc(
 		{
 			"doctype": "Seat Change Log",
 			"subscription": subscription,
-			"site": subscription_doc.site,
+			"site": site_name,
 			"old_seats": cint(old_seats),
 			"new_seats": cint(new_seats),
 			"change_type": "Increase" if cint(new_seats) >= cint(old_seats) else "Decrease",
