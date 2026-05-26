@@ -42,6 +42,16 @@ class Subscription(PressSubscription):
 
 		return cint(getattr(plan, "min_seats", 0) or 1)
 
+	def _get_effective_billable_seats(self, plan) -> int:
+		"""
+		Returns the seat count that should be enforced for this subscription.
+		Prioritizes the existing subscription value, but never allows it to fall
+		below the site's current billed seats or the plan minimum.
+		"""
+		current_seats = cint(getattr(self, "billable_seats", 0) or 0)
+		seed_seats = self._get_seed_billable_seats(plan)
+		return max(current_seats, seed_seats)
+
 	def before_validate(self):
 		"""
 		Preprocessing before standard validation.
@@ -57,9 +67,8 @@ class Subscription(PressSubscription):
 		if not is_seat_based_plan(plan):
 			return
 
-		# Set initial seat count if missing
-		if not cint(getattr(self, "billable_seats", 0) or 0):
-			self.billable_seats = self._get_seed_billable_seats(plan)
+		# Keep subscription seats at or above the site's billed seat count
+		self.billable_seats = self._get_effective_billable_seats(plan)
 
 		# Sync price per seat from plan if not explicitly set
 		if not getattr(self, "price_per_seat", None):
@@ -86,8 +95,8 @@ class Subscription(PressSubscription):
 		min_seats = cint(getattr(plan, "min_seats", 0) or 1)
 		max_seats = cint(getattr(plan, "max_seats", 0) or 0)
 		
-		# Ensure seat count stays within plan boundaries
-		self.billable_seats = cint(getattr(self, "billable_seats", 0) or self._get_seed_billable_seats(plan))
+		# Ensure seat count stays within plan boundaries and doesn't fall behind the site state
+		self.billable_seats = self._get_effective_billable_seats(plan)
 		if self.billable_seats < min_seats:
 			frappe.throw(f"You need at least {min_seats} seats on this plan.")
 
