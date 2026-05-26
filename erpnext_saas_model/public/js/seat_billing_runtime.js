@@ -90,6 +90,8 @@
 		const amount = Number(value || 0);
 		const currency = getCurrencyCode();
 
+		log('Formatting currency:', amount, currency);
+
 		if (window.format_currency) {
 			return window.format_currency(amount, currency);
 		}
@@ -285,12 +287,6 @@
 			: '';
 
 		state.panel.innerHTML = `
-			<div>
-				<button class="text-xs text-ink-gray-6 hover:text-ink-gray-9 flex items-center gap-1 mb-4" data-role="back-to-plans">
-					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-					Back to plans
-				</button>
-			</div>
 			<div class="flex items-start justify-between gap-4">
 				<div>
 					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
