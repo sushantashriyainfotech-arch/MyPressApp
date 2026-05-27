@@ -94,13 +94,20 @@
 	}
 
 	function getLocale() {
+		const LOCALE_MAP = {
+			'India': 'en-IN',
+			'United States': 'en-US',
+			'United Kingdom': 'en-GB',
+			'Germany': 'de-DE',
+			'France': 'fr-FR',
+			'Japan': 'ja-JP',
+			'Australia': 'en-AU',
+			'Canada': 'en-CA',
+		};
 
-		const localeData = require('./locales/en.json');
-		const country = state.country;
-		const defaultLocale = localeData.India;
-
-		return localeData[country] || defaultLocale || 'en-US';
+		return LOCALE_MAP[state.country] || 'en-US';
 	}
+
 
 	async function formatCurrency(value) {
 		const amount = Number(value || 0);
