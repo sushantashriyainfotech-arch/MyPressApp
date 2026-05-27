@@ -13,8 +13,8 @@
 		panel: null,
 		planGrid: null,
 		step: 1, // 1: Plan selection, 2: Seat selection
-		currency: 'INR',
-		country: 'India',
+		currency: 'USD',
+		country: 'United States',
 	};
 
 	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
@@ -94,16 +94,12 @@
 	}
 
 	function getLocale() {
-		try {
-			const localeData = require('./locales/en.json');
-			const country = state.country;
-			const defaultLocale = localeData.India;
 
-			return localeData[country] || defaultLocale;
+		const localeData = require('./locales/en.json');
+		const country = state.country;
+		const defaultLocale = localeData.India;
 
-		} catch {
-			return 'en-IN';
-		}
+		return localeData[country] || defaultLocale || 'en-US';
 	}
 
 	async function formatCurrency(value) {
