@@ -346,10 +346,10 @@
 			<div class="mt-2 text-xs text-red-600" data-role="seat-warning"></div>
 		`;
 
-		state.panel.querySelector('[data-role="back-to-plans"]').onclick = () => {
-			state.step = 1;
-			renderPanel();
-		};
+		// state.panel.querySelector('[data-role="back-to-plans"]').onclick = () => {
+		// 	state.step = 1;
+		// 	renderPanel();
+		// };
 
 		state.panel.querySelector('[data-role="seat-range"]').textContent = seatRangeText;
 		state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(total);
