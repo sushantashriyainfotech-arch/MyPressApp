@@ -82,20 +82,26 @@
 			window.frappe?.boot?.sysdefaults?.currency ||
 			window.frappe?.session?.currency ||
 			'USD';
+			
+			loadCurrency();
 
-			log('w', window);
-			log('w-f', window?.frappe);
-			log('w-f-b'. window?.frappe?.boot);
-
-			log('w-f-b-t-c', window.frappe?.boot?.team?.currency)
-			log('w-f-b-tc', window.frappe?.boot?.team_currency)
-			log('w-f-b-cs', window.frappe?.boot?.currency_symbols)
-			log('w-f-b-c', window.frappe?.boot?.currency)
-			log('w-f-b-sd-c', window.frappe?.boot?.sysdefaults?.currency)
-			log('w-f-s-c', window.frappe?.session?.currency)
 		const symbols = window.frappe?.boot?.currency_symbols || {};
 		return symbols[currency] || currency;
 	}
+
+	async function loadCurrency() {
+    try {
+        const res = await fetch('/api/method/press.api.account.get_account_details', {
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+		log('data', data)
+        return data?.message?.currency || 'USD';
+    } catch {
+        return 'USD';
+    }
+}
 
 	function formatCurrency(value) {
 		const amount = Number(value || 0);
