@@ -109,7 +109,7 @@
 	}
 
 
-	async function formatCurrency(value) {
+	function formatCurrency(value) {
 		const amount = Number(value || 0);
 
 		const currency = state.currency;
