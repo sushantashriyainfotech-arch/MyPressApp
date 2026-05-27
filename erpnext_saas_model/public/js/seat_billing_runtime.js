@@ -13,6 +13,8 @@
 		panel: null,
 		planGrid: null,
 		step: 1, // 1: Plan selection, 2: Seat selection
+		currency: 'INR',
+		country: 'India',
 	};
 
 	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
@@ -82,6 +84,8 @@
 
 			);
 			const data = await res.json();
+
+			log('Fetched team data:', data?.message);
 			return data?.message;
 		} catch {
 			console.error('Failed to fetch team data');
@@ -89,9 +93,10 @@
 		}
 	}
 
-	function getLocale(country) {
+	function getLocale() {
 		try {
 			const localeData = require('./locales/en.json');
+			const country = state.country;
 			const defaultLocale = localeData.India;
 
 			return localeData[country] || defaultLocale;
@@ -104,10 +109,10 @@
 	async function formatCurrency(value) {
 		const amount = Number(value || 0);
 
-		const currentTeamData = await getCurrentTeamData();
+		const currency = state.currency;
+		const locale = getLocale();
 
-		const currency = currentTeamData?.currency || 'INR';
-		const locale = await getLocale(currentTeamData?.country);
+		log('Formatting currency with locale:', locale, 'and currency:', currency);
 
 		log('Formatting currency:', amount, currency);
 
@@ -173,6 +178,13 @@
 		const data = await response.json();
 		state.plans = Array.isArray(data.message) ? data.message : [];
 		return state.plans;
+	}
+
+	async function loadLocale() {
+		const data = await getCurrentTeamData();
+		state.country = data?.country || state.country;
+		state.currency = data?.currency || state.currency;
+		log('Locale loaded:', { country: state.country, currency: state.currency });
 	}
 
 	function getSelectedPlanFromGrid(grid) {
@@ -786,12 +798,11 @@
 		observe();
 
 		try {
-			await loadPlans();
+			await Promise.all([loadPlans(), loadLocale()]);
 		} catch (error) {
 			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
 			return;
 		}
-
 		maybeMount();
 	}
 
