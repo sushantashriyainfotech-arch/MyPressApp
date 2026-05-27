@@ -74,39 +74,36 @@
 		);
 	}
 
-	function getCurrencyCode() {
-		const currency =
-			window.frappe?.boot?.team?.currency ||
-			window.frappe?.boot?.team_currency ||
-			window.frappe?.boot?.currency ||
-			window.frappe?.boot?.sysdefaults?.currency ||
-			window.frappe?.session?.currency ||
-			'USD';
-			
-			loadCurrency();
+	async function getCurrencyCode() {
+		try {
+			const res = await fetch('/api/method/press.api.team.get_current_team', {
+				credentials: 'same-origin',
+			}
 
-		const symbols = window.frappe?.boot?.currency_symbols || {};
-		return symbols[currency] || currency;
+			);
+			const data = await res.json();
+			return data?.message?.currency || 'USD';
+		} catch {
+			return 'USD';
+		}
 	}
 
-	async function loadCurrency() {
-    try {
-        const res = await fetch('/api/method/press.api.team.get_current_team', {
-            credentials: 'same-origin',
-        }
-	
-	);
-        const data = await res.json();
-		log('data', data)
-        return data?.message?.currency || 'USD';
-    } catch {
-        return 'USD';
-    }
-}
+	function getLocale(country) {
+		try {
+			const localeData = require('./locales/en.json');
+			const defaultLocale = localeData.India;
 
-	function formatCurrency(value) {
+			return localeData[country] || defaultLocale;
+
+		} catch {
+			return defaultLocale;
+		}
+	}
+
+	async function formatCurrency(value) {
 		const amount = Number(value || 0);
-		const currency = getCurrencyCode();
+		const currency = await getCurrencyCode();
+		const locale = await getLocale();
 
 		log('Formatting currency:', amount, currency);
 
@@ -114,16 +111,11 @@
 			return window.format_currency(amount, currency);
 		}
 
-		try {
-			return new Intl.NumberFormat(undefined, {
-				style: 'currency',
-				currency,
-				currencyDisplay: 'symbol',
-			}).format(amount);
-		} catch (error) {
-			const symbol = window.frappe?.boot?.currency_symbols?.[currency] || currency;
-			return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-		}
+		return new Intl.NumberFormat(locale, {
+			style: 'currency',
+			currency,
+			currencyDisplay: 'symbol',
+		}).format(amount);
 	}
 
 	function isSeatBased(plan) {
@@ -506,7 +498,7 @@
 			nestedDocs?.subscription_plan ||
 			nestedDocs?.plan;
 		const plan = findPlanByName(planName);
-		
+
 		// For non-seat-based plans, ensure we don't send stale seat billing data.
 		if (!isSeatBased(plan)) {
 			if (bodyIsSearchParams) {
