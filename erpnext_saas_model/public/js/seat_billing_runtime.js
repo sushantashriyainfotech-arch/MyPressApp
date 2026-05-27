@@ -91,9 +91,11 @@
 
 	async function loadCurrency() {
     try {
-        const res = await fetch('/api/method/press.api.account.feedback', {
-            credentials: 'same-origin'
-        });
+        const res = await fetch('/api/method/press.api.team.get_current_team', {
+            credentials: 'same-origin',
+        }
+	
+	);
         const data = await res.json();
 		log('data', data)
         return data?.message?.currency || 'USD';
