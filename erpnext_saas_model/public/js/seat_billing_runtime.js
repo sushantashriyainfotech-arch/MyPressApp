@@ -74,7 +74,7 @@
 		);
 	}
 
-	async function getCurrencyCode() {
+	async function getCurrentTeamData() {
 		try {
 			const res = await fetch('/api/method/press.api.team.get_current_team', {
 				credentials: 'same-origin',
@@ -82,9 +82,10 @@
 
 			);
 			const data = await res.json();
-			return data?.message?.currency || 'USD';
+			return data?.message;
 		} catch {
-			return 'USD';
+			console.error('Failed to fetch team data');
+			return;
 		}
 	}
 
@@ -102,8 +103,11 @@
 
 	async function formatCurrency(value) {
 		const amount = Number(value || 0);
-		const currency = await getCurrencyCode();
-		const locale = await getLocale();
+
+		const currentTeamData = await getCurrentTeamData();
+
+		const currency = currentTeamData?.currency || 'INR';
+		const locale = await getLocale(currentTeamData?.country);
 
 		log('Formatting currency:', amount, currency);
 
