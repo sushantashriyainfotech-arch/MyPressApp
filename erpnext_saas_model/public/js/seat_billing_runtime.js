@@ -102,7 +102,7 @@
 			return localeData[country] || defaultLocale;
 
 		} catch {
-			return defaultLocale;
+			return 'en-IN';
 		}
 	}
 
