@@ -3,7 +3,8 @@ from __future__ import annotations
 from frappe.rate_limiter import rate_limit
 
 from press.api.client import dashboard_whitelist
-from press.guards import feature_preview, team_guard
+from press.guards.feature_preview import beta_testing
+from press.guards.team_guard import only_admin
 from press.press.doctype.team.team import Team as PressTeam
 
 from erpnext_saas_model.seat_billing import validate_team_member_seat_limit
@@ -18,8 +19,8 @@ class Team(PressTeam):
 		validate_team_member_seat_limit(self.name)
 
 	@dashboard_whitelist()
-	@feature_preview.beta_testing()
-	@team_guard.only_admin()
+	@beta_testing()
+	@only_admin()
 	def send_invitation(self, names: str):
 		# Keep the original behavior, but reject invites when the seat cap is already full.
 		self._validate_member_capacity()
