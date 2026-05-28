@@ -141,6 +141,7 @@ override_doctype_class = {
 	"Site": ["erpnext_saas_model.doctype.site.site.Site"],
 	"Site Plan": ["erpnext_saas_model.doctype.site_plan.site_plan.SitePlan"],
 	"Subscription": ["erpnext_saas_model.doctype.subscription.subscription.Subscription"],
+	"Team": ["erpnext_saas_model.doctype.team.team.Team"],
 	"Usage Record": ["erpnext_saas_model.doctype.usage_record.usage_record.UsageRecord"],
 	"Invoice": ["erpnext_saas_model.doctype.invoice.invoice.Invoice"],
 	"Seat Change Log": ["erpnext_saas_model.doctype.seat_change_log.seat_change_log.SeatChangeLog"],
@@ -157,6 +158,11 @@ override_doctype_class = {
 # 		"on_trash": "method"
 # 	}
 # }
+doc_events = {
+	"Site User": {
+		"before_save": "erpnext_saas_model.seat_billing.validate_site_user_before_save",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

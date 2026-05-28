@@ -8,6 +8,7 @@ from press.press.doctype.site.site import Site as PressSite
 
 from erpnext_saas_model.seat_billing import (
 	is_seat_based_plan,
+	sync_site_users_from_analytics,
 	validate_seat_selection_for_plan,
 )
 
@@ -92,3 +93,16 @@ class Site(PressSite):
 			)
 
 		return super().set_plan(plan)
+
+	def sync_users_to_product_site(self, analytics=None):
+		"""
+		Sync enabled users from the product site while honoring billable-seat limits.
+		"""
+		if self.is_standby:
+			return
+
+		if not analytics:
+			analytics = self.fetch_analytics()
+
+		if analytics:
+			sync_site_users_from_analytics(self.name, analytics)

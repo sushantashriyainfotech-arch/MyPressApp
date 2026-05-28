@@ -247,6 +247,251 @@ def get_active_user_count(site_name: str) -> int:
 	return active_users
 
 
+def get_site_billable_seats(site: str | dict[str, Any] | None) -> int:
+	"""
+	Returns the current seat allowance for a site.
+	Prefers the Site doc's billable_seats field, then falls back to the
+	linked subscription or plan minimum for seat-based plans.
+	"""
+	if not site:
+		return 0
+
+	if isinstance(site, dict):
+		site_doc = frappe._dict(site)
+	else:
+		site_doc = site if hasattr(site, "doctype") else frappe.get_cached_doc("Site", site)
+
+	subscription = getattr(site_doc, "subscription", None)
+	plan = None
+	if subscription:
+		plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
+	elif getattr(site_doc, "plan", None) or getattr(site_doc, "subscription_plan", None):
+		plan_name = getattr(site_doc, "plan", None) or getattr(site_doc, "subscription_plan", None)
+		plan = frappe.get_cached_doc("Site Plan", plan_name)
+
+	if not plan or not is_seat_based_plan(plan):
+		return 0
+
+	billable_seats = cint(getattr(site_doc, "billable_seats", 0) or 0)
+	if billable_seats:
+		return billable_seats
+
+	if subscription:
+		billable_seats = cint(getattr(subscription, "billable_seats", 0) or 0)
+		if billable_seats:
+			return billable_seats
+
+	return cint(getattr(plan, "min_seats", 0) or 1)
+
+
+def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, Any]:
+	"""
+	Builds a compact context payload used when validating site user creation.
+	"""
+	if not site:
+		return {"billable_seats": 0, "active_user_count": 0, "plan": None, "suggested_plan": None}
+
+	site_doc = site if hasattr(site, "doctype") else frappe.get_cached_doc("Site", site)
+	subscription = getattr(site_doc, "subscription", None)
+	plan = None
+
+	if subscription:
+		plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
+	elif getattr(site_doc, "plan", None) or getattr(site_doc, "subscription_plan", None):
+		plan_name = getattr(site_doc, "plan", None) or getattr(site_doc, "subscription_plan", None)
+		plan = frappe.get_cached_doc("Site Plan", plan_name)
+
+	billable_seats = get_site_billable_seats(site_doc)
+	active_user_count = frappe.db.count("Site User", {"site": site_doc.name, "enabled": 1})
+	suggested_plan = getattr(plan, "next_plan", None) if plan else None
+
+	return {
+		"site": site_doc.name,
+		"billable_seats": billable_seats,
+		"active_user_count": active_user_count,
+		"plan": getattr(plan, "name", None),
+		"plan_title": getattr(plan, "plan_title", None) if plan else None,
+		"suggested_plan": suggested_plan,
+	}
+
+
+def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = True) -> dict[str, Any]:
+	"""
+	Ensures that enabling or creating a site user does not exceed billable seats.
+	"""
+	context = get_site_seat_limit_context(site)
+	if not enabled:
+		return context
+
+	if not context["billable_seats"]:
+		return context
+
+	# The current count does not include the pending insert/update, so equal means full.
+	if context["active_user_count"] >= context["billable_seats"]:
+		suggested_plan = context.get("suggested_plan")
+		if suggested_plan:
+			frappe.throw(
+				_(
+					"This site has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
+				).format(context["billable_seats"], suggested_plan)
+			)
+
+		frappe.throw(
+			_(
+				"This site has reached its billable seat limit of {0}. Please upgrade your plan to add more users."
+			).format(context["billable_seats"])
+		)
+
+	return context
+
+
+def upsert_site_user(site: str, user_mail: str, enabled: bool) -> dict[str, Any] | None:
+	"""
+	Creates or updates a Site User row while honoring seat limits.
+	Returns the inserted/updated document, or None when no change is needed.
+	"""
+	if not site or not user_mail:
+		return None
+
+	site_doc = frappe.get_cached_doc("Site", site)
+	enabled = bool(cint(enabled))
+	site_user_name = frappe.db.get_value("Site User", {"site": site_doc.name, "user": user_mail}, "name")
+
+	if site_user_name:
+		current_enabled = cint(frappe.db.get_value("Site User", site_user_name, "enabled") or 0)
+		if current_enabled == cint(enabled):
+			return frappe.get_doc("Site User", site_user_name)
+
+		if enabled:
+			validate_site_user_seat_limit(site_doc, enabled=True)
+
+		frappe.db.set_value("Site User", site_user_name, "enabled", enabled)
+		return frappe.get_doc("Site User", site_user_name)
+
+	if enabled:
+		validate_site_user_seat_limit(site_doc, enabled=True)
+
+	site_user = frappe.get_doc(
+		{
+			"doctype": "Site User",
+			"site": site_doc.name,
+			"user": user_mail,
+			"enabled": enabled,
+		}
+	)
+	site_user.insert(ignore_permissions=True)
+	return site_user
+
+
+def validate_site_user_before_save(doc, method=None):
+	"""
+	Doc event hook for Site User writes that bypass the custom sync helpers.
+	"""
+	previous = doc.get_doc_before_save() if hasattr(doc, "get_doc_before_save") else None
+	if previous and cint(getattr(previous, "enabled", 0)) == cint(getattr(doc, "enabled", 0)):
+		return
+
+	validate_site_user_seat_limit(getattr(doc, "site", None), enabled=bool(cint(getattr(doc, "enabled", 0))))
+
+
+def _get_team_seat_limited_site(team_name: str | None):
+	"""Returns the seat-based site linked to a team, if one exists."""
+	if not team_name:
+		return None
+
+	for site in frappe.get_all(
+		"Site",
+		filters={"team": team_name},
+		fields=["name"],
+		order_by="modified desc",
+	):
+		site_doc = frappe.get_cached_doc("Site", site.name)
+		subscription = getattr(site_doc, "subscription", None)
+		if subscription and is_seat_based_plan(frappe.get_cached_doc(subscription.plan_type, subscription.plan)):
+			return site_doc
+
+		plan_name = getattr(site_doc, "plan", None) or getattr(site_doc, "subscription_plan", None)
+		if plan_name and is_seat_based_plan(frappe.get_cached_doc("Site Plan", plan_name)):
+			return site_doc
+
+	return None
+
+
+def get_team_seat_limit_context(team: str | dict[str, Any] | None) -> dict[str, Any]:
+	"""
+	Builds a seat-limit context for Team member operations.
+	"""
+	if not team:
+		return {
+			"team": None,
+			"site": None,
+			"billable_seats": 0,
+			"active_user_count": 0,
+			"plan": None,
+			"plan_title": None,
+			"suggested_plan": None,
+		}
+
+	team_doc = team if hasattr(team, "doctype") else frappe.get_cached_doc("Team", team)
+	site_doc = _get_team_seat_limited_site(team_doc.name)
+	if not site_doc:
+		return {
+			"team": team_doc.name,
+			"site": None,
+			"billable_seats": 0,
+			"active_user_count": 0,
+			"plan": None,
+			"plan_title": None,
+			"suggested_plan": None,
+		}
+
+	site_context = get_site_seat_limit_context(site_doc)
+	site_context.update(
+		{
+			"team": team_doc.name,
+			"active_user_count": frappe.db.count(
+				"Team Member", {"parent": team_doc.name, "parenttype": "Team"}
+			),
+		}
+	)
+	return site_context
+
+
+def validate_team_member_seat_limit(team: str | dict[str, Any]) -> dict[str, Any]:
+	"""
+	Ensures that adding another team member does not exceed billable seats.
+	"""
+	context = get_team_seat_limit_context(team)
+	if not context["billable_seats"]:
+		return context
+
+	if context["active_user_count"] >= context["billable_seats"]:
+		suggested_plan = context.get("suggested_plan")
+		if suggested_plan:
+			frappe.throw(
+				_(
+					"This team has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
+				).format(context["billable_seats"], suggested_plan)
+			)
+
+		frappe.throw(
+			_(
+				"This team has reached its billable seat limit of {0}. Please upgrade your plan to add more users."
+			).format(context["billable_seats"])
+		)
+
+	return context
+
+
+def sync_site_users_from_analytics(site: str, analytics_payload: dict[str, Any]) -> None:
+	"""
+	Syncs users from site analytics to Press while enforcing seat caps.
+	"""
+	users = _extract_users_from_analytics(analytics_payload)
+	for user_data in users:
+		upsert_site_user(site, user_data.get("email"), user_data.get("enabled"))
+
+
 def get_subscription_seat_context(subscription: str | dict[str, Any]) -> dict[str, Any]:
 	"""
 	Compiles a context object representing the current seat-billing state 
