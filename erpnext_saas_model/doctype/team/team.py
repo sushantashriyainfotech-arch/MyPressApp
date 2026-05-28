@@ -5,7 +5,6 @@ from frappe.rate_limiter import rate_limit
 
 from press.api.client import dashboard_whitelist
 from press.press.doctype.team.team import Team as PressTeam
-from press.utils.user import is_beta_tester
 
 from erpnext_saas_model.seat_billing import validate_team_member_seat_limit
 
@@ -21,9 +20,6 @@ class Team(PressTeam):
 	@dashboard_whitelist()
 	def send_invitation(self, names: str):
 		# Keep the original behavior, but reject invites when the seat cap is already full.
-		if not is_beta_tester():
-			frappe.throw("This feature is only available for beta testers", frappe.ValidationError)
-
 		if not (self.is_team_owner() or self.is_admin_user()):
 			frappe.throw("Only team admin can perform this action.", frappe.PermissionError)
 
