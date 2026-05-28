@@ -25,12 +25,13 @@ required_apps = ["press"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/erpnext_saas_model/css/erpnext_saas_model.css"
-app_include_js = "/assets/erpnext_saas_model/js/manage_billing_override.js"
+app_include_js = ["/assets/erpnext_saas_model/js/manage_billing_override.js"]
 
 
 # include js, css files in header of web template
 # web_include_css = "/assets/erpnext_saas_model/css/erpnext_saas_model.css"
 # web_include_js = "/assets/erpnext_saas_model/js/erpnext_saas_model.js"
+web_include_js = ["/assets/erpnext_saas_model/js/manage_billing_override.js"]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "erpnext_saas_model/public/scss/website"
