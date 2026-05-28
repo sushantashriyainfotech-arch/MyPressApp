@@ -1,5 +1,18 @@
 (function () {
+
+	const DEBUG = true; // Set to false in production
+
+	function log(...args) {
+		if (DEBUG) console.log('[Seat Billing]', ...args);
+	}
+
+
 	function getCurrencyCode() {
+		log('f-b-t currency', frappe?.boot?.team?.currency)
+		log('f-b team_currency', frappe?.boot?.team_currency)
+		log('f-b currency', frappe?.boot?.currency)
+		log('f-b sysdefaults.currency', frappe?.boot?.sysdefaults?.currency)
+		log('f-b session.currency', frappe?.session?.currency)
 		return (
 			frappe?.boot?.team?.currency ||
 			frappe?.boot?.team_currency ||
@@ -8,6 +21,7 @@
 			frappe?.session?.currency ||
 			'USD'
 		);
+
 	}
 
 	function formatMoney(value) {
