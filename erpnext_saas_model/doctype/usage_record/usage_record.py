@@ -26,5 +26,5 @@ class UsageRecord(PressUsageRecord):
 
 		if not getattr(self, "seat_amount", None):
 			self.seat_amount = self.amount
-
-		self.amount = self.seat_amount
+		if not getattr(self, "amount", None):
+			self.amount = self.seat_amount
