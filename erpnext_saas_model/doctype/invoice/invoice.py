@@ -5,7 +5,7 @@ from frappe.utils import cint, flt, fmt_money
 
 from press.press.doctype.invoice.invoice import Invoice as PressInvoice
 
-from erpnext_saas_model.seat_billing import get_seat_billing_month_fraction, is_seat_based_plan
+from erpnext_saas_model.seat_billing import is_seat_based_plan
 
 
 class Invoice(PressInvoice):
@@ -15,6 +15,18 @@ class Invoice(PressInvoice):
 
 		plan = frappe.get_cached_doc(usage_record.plan_type, usage_record.plan)
 		return is_seat_based_plan(plan)
+
+	def _get_seat_usage_pricing(self, usage_record) -> tuple[int, float]:
+		"""
+		Returns the invoice seat count and per-day rate.
+		"""
+		billable_seats = cint(getattr(self, "billable_seats", 0) or getattr(usage_record, "billable_seats", 0) or 1)
+		monthly_seat_total = flt(getattr(usage_record, "seat_amount", 0) or getattr(usage_record, "amount", 0), 2)
+		price_per_seat = flt(monthly_seat_total / billable_seats, 2) if billable_seats else monthly_seat_total
+		usage_record_date = frappe.utils.getdate(usage_record.date)
+		days_in_month = frappe.utils.get_last_day(usage_record_date).day or 30
+		daily_rate = flt((price_per_seat * billable_seats) / days_in_month, 2)
+		return billable_seats, daily_rate
 
 	def add_usage_record(self, usage_record):
 		if not self._is_seat_usage_record(usage_record):
@@ -33,9 +45,7 @@ class Invoice(PressInvoice):
 		if not (start <= usage_record_date <= end):
 			return
 
-		billable_seats = cint(getattr(usage_record, "billable_seats", 0) or 0)
-		seat_amount = flt(getattr(usage_record, "seat_amount", 0) or getattr(usage_record, "amount", 0), 2)
-		quantity_increment = get_seat_billing_month_fraction(usage_record.date)
+		billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
 
 		invoice_item = self.get_invoice_item_for_usage_record(usage_record)
 		if not invoice_item:
@@ -46,16 +56,16 @@ class Invoice(PressInvoice):
 					"document_name": usage_record.document_name,
 					"plan": usage_record.plan,
 					"quantity": 0,
-					"rate": seat_amount,
+					"rate": daily_rate,
 					"site": usage_record.site,
 				},
 			)
-
-		invoice_item.quantity = flt((invoice_item.quantity or 0) + quantity_increment, 8)
-		if billable_seats and getattr(invoice_item.meta, "get_field", None) and invoice_item.meta.get_field(
-			"custom_no_of_seats"
-		):
-			invoice_item.custom_no_of_seats = billable_seats
+		else:
+			invoice_item.rate = daily_rate
+		invoice_item.quantity = flt((invoice_item.quantity or 0) + 1, 2)
+		invoice_item.amount = flt((invoice_item.quantity or 0) * daily_rate, 2)
+		if billable_seats:
+			self.billable_seats = billable_seats
 
 		self.save()
 		usage_record.db_set("invoice", self.name)
@@ -73,14 +83,13 @@ class Invoice(PressInvoice):
 		if usage_record.invoice != self.name:
 			return
 
-		quantity_increment = get_seat_billing_month_fraction(usage_record.date)
-
+		_, daily_rate = self._get_seat_usage_pricing(usage_record)
 		for row in self.items:
 			conditions = (
 				row.document_type == usage_record.document_type
 				and row.document_name == usage_record.document_name
 				and row.plan == usage_record.plan
-				and row.rate == usage_record.amount
+				and flt(row.rate or 0, 2) == daily_rate
 			)
 			if row.document_type == "Marketplace App":
 				conditions = conditions and row.site == usage_record.site
@@ -88,22 +97,30 @@ class Invoice(PressInvoice):
 			if not conditions:
 				continue
 
-			if flt(row.quantity or 0, 8) <= 0:
-				return
-
-			row.quantity = flt((row.quantity or 0) - quantity_increment, 8)
-			self.save()
 			usage_record.db_set("invoice", None)
+			remaining = frappe.db.count(
+				"Usage Record",
+				{
+					"invoice": self.name,
+					"document_type": usage_record.document_type,
+					"document_name": usage_record.document_name,
+					"plan": usage_record.plan,
+				},
+			)
+			if not remaining:
+				self.remove(row)
+				self.save()
 			return
 
 	def get_invoice_item_for_usage_record(self, usage_record):
 		if self._is_seat_usage_record(usage_record):
+			_, daily_rate = self._get_seat_usage_pricing(usage_record)
 			for row in self.items:
 				conditions = (
 					row.document_type == usage_record.document_type
 					and row.document_name == usage_record.document_name
 					and row.plan == usage_record.plan
-					and row.rate == usage_record.amount
+					and flt(row.rate or 0, 2) == daily_rate
 				)
 				if row.document_type == "Marketplace App":
 					conditions = conditions and row.site == usage_record.site
@@ -127,19 +144,13 @@ class Invoice(PressInvoice):
 			if not is_seat_based_plan(plan):
 				continue
 			total = flt(item.amount, 2)
-			days_in_month = frappe.utils.get_last_day(frappe.utils.getdate(self.period_start or self.period_end or frappe.utils.today())).day or 30
-			used_days = int(round(flt(item.quantity or 0, 8) * days_in_month))
-			seats = cint(getattr(item, "custom_no_of_seats", 0) or 0)
-			if seats:
-				item.description = (
-					f"{getattr(plan, 'plan_title', None) or plan.name} — {seats} seats for "
-					f"{used_days} of {days_in_month} days = {fmt_money(total, 2, self.currency)}"
-				)
-			else:
-				item.description = (
-					f"{getattr(plan, 'plan_title', None) or plan.name} — "
-					f"{used_days} of {days_in_month} days = {fmt_money(total, 2, self.currency)}"
-				)
+			seats = cint(getattr(self, "billable_seats", 0) or 0)
+			daily_rate = flt(item.rate or 0, 2)
+			item.description = (
+				f"{getattr(plan, 'plan_title', None) or plan.name} — {cint(item.quantity or 0)} days, "
+				f"{seats} seats × {fmt_money(daily_rate, 2, self.currency)} per day = "
+				f"{fmt_money(total, 2, self.currency)}"
+			)
 
 		if hasattr(PressInvoice, "update_item_descriptions"):
 			PressInvoice.update_item_descriptions(self)
@@ -156,8 +167,5 @@ class Invoice(PressInvoice):
 			return
 
 		latest_item = seat_items[-1]
-		self.billable_seats = cint(getattr(latest_item, "custom_no_of_seats", 0) or 0)
-		if self.billable_seats:
-			self.price_per_seat = flt((flt(latest_item.rate or 0, 2) / self.billable_seats), 2)
-		else:
-			self.price_per_seat = flt(latest_item.rate or 0, 2)
+		self.billable_seats = cint(getattr(self, "billable_seats", 0) or 0)
+		self.price_per_seat = flt(latest_item.rate or 0, 2)

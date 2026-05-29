@@ -26,9 +26,10 @@
 
 	function formatSeatLine(frm) {
 		const seats = Number(frm.doc.billable_seats || 0);
-		const price = Number(frm.doc.price_per_seat || 0);
+		const dailyRate = Number(frm.doc.price_per_seat || 0);
+		const days = Number(frm.doc.items?.reduce((total, item) => total + Number(item.quantity || 0), 0) || 0);
 		const total = Number(frm.doc.total || 0);
-		return `${seats} seats × ${formatMoney(price)} = ${formatMoney(total)}`;
+		return `${days} days, ${seats} seats × ${formatMoney(dailyRate)} per day = ${formatMoney(total)}`;
 	}
 
 	frappe.ui.form.on("Invoice", {

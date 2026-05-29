@@ -60,17 +60,6 @@ def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
 	return flt(price, 2)
 
 
-def get_seat_billing_month_fraction(date=None) -> float:
-	"""
-	Returns the fraction of a monthly seat charge that should be billed for one day.
-	"""
-	billing_date = getdate(date or frappe.utils.today())
-	days_in_month = frappe.utils.get_last_day(billing_date).day
-	if not days_in_month:
-		return 1.0
-	return flt(1 / days_in_month, 8)
-
-
 def get_seat_plans() -> list[dict[str, Any]]:
 	"""
 	Returns a list of all enabled Site Plans that use seat-based billing.
