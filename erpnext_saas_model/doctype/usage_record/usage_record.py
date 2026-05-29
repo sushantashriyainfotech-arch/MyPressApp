@@ -28,3 +28,32 @@ class UsageRecord(PressUsageRecord):
 			self.seat_amount = self.amount
 		if not getattr(self, "amount", None):
 			self.amount = self.seat_amount
+
+	def validate_duplicate_usage_record(self):
+		# Keep Press behavior, but do not key duplicates off amount.
+		if self.document_type == "Server":
+			is_primary = frappe.db.get_value("Server", self.document_name, "is_primary")
+			if not is_primary:
+				return
+
+		usage_record = frappe.get_all(
+			"Usage Record",
+			{
+				"name": ("!=", self.name),
+				"team": self.team,
+				"document_type": self.document_type,
+				"document_name": self.document_name,
+				"interval": self.interval,
+				"date": self.date,
+				"plan": self.plan,
+				"docstatus": 1,
+				"subscription": self.subscription,
+			},
+			pluck="name",
+		)
+
+		if usage_record:
+			frappe.throw(
+				f"Usage Record {usage_record[0]} already exists for this document",
+				frappe.DuplicateEntryError,
+			)

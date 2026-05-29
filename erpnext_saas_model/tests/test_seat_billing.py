@@ -15,6 +15,13 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		usage_record = UsageRecord.__new__(UsageRecord)
 		usage_record.plan = "PLAN-001"
 		usage_record.plan_type = "Site Plan"
+		usage_record.name = "UR-001"
+		usage_record.team = "TEAM-001"
+		usage_record.document_type = "Site"
+		usage_record.document_name = "SITE-001"
+		usage_record.interval = "Daily"
+		usage_record.date = "2026-05-29"
+		usage_record.subscription = "SUB-001"
 		usage_record.amount = 12.5
 		usage_record.seat_amount = None
 		usage_record.billable_seats = 0
@@ -32,3 +39,28 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		self.assertEqual(usage_record.seat_amount, 12.5)
 		self.assertEqual(usage_record.billable_seats, 1)
 		self.assertIsNotNone(usage_record.snapshot_taken_at)
+
+	def test_duplicate_usage_record_check_ignores_amount(self):
+		usage_record = UsageRecord.__new__(UsageRecord)
+		usage_record.name = "UR-002"
+		usage_record.team = "TEAM-001"
+		usage_record.document_type = "Site"
+		usage_record.document_name = "SITE-001"
+		usage_record.interval = "Daily"
+		usage_record.date = "2026-05-29"
+		usage_record.plan = "PLAN-001"
+		usage_record.subscription = "SUB-001"
+		usage_record.amount = 99.99
+
+		captured_filters = {}
+
+		def fake_get_all(doctype, filters, pluck=None):
+			captured_filters.update(filters)
+			return []
+
+		with patch.object(usage_record_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			usage_record_module.frappe.db, "get_value", return_value=1
+		):
+			usage_record.validate_duplicate_usage_record()
+
+		self.assertNotIn("amount", captured_filters)
