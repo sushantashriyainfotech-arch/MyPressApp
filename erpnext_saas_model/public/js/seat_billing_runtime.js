@@ -657,6 +657,50 @@
 		return cloned;
 	}
 
+	function shouldLogRequest(url) {
+		return (
+			(url || '').includes('press.api.site.new') ||
+			(url || '').includes('press.api.client.insert') ||
+			(url || '').includes('press.api.client.run_doc_method') ||
+			(url || '').includes('set_plan') ||
+			(url || '').includes('change_plan')
+		);
+	}
+
+	function parseMaybeJSONSafe(value) {
+		if (value == null || value === '') return null;
+		if (typeof value === 'object') return value;
+
+		try {
+			return JSON.parse(value);
+		} catch (error) {
+			return null;
+		}
+	}
+
+	function logRequestResponse(url, requestBody, responseData) {
+		const responseMessage = responseData?.message || null;
+		const responseDoc = Array.isArray(responseData?.docs) ? responseData.docs[0] : null;
+		const debugPayload = {
+			event: 'seat_billing.request_response',
+			url,
+			request_body: requestBody,
+			request_site: requestBody?.args?.name || requestBody?.name || requestBody?.dn || null,
+			request_plan: requestBody?.args?.plan || requestBody?.plan || requestBody?.doc?.plan || null,
+			request_billable_seats:
+				requestBody?.args?.billable_seats ||
+				requestBody?.billable_seats ||
+				requestBody?.doc?.billable_seats ||
+				null,
+			response_subscription: responseMessage?.subscription || responseDoc?.subscription || null,
+			response_site: responseMessage?.site || responseDoc?.name || null,
+			response_team: responseDoc?.team || null,
+			response_data: responseData,
+		};
+
+		console.log('[Seat Billing Debug]', debugPayload);
+	}
+
 	function patchFetch() {
 		// Patch fetch first so any later app requests pass through the seat injector.
 		if (window.__erpnextSeatBillingFetchPatched) return;
@@ -672,15 +716,21 @@
 						: input && input.url
 							? input.url
 							: '';
-				if (
-					url.includes('press.api.site.new') ||
-					url.includes('press.api.client.insert') ||
-					url.includes('press.api.client.run_doc_method') ||
-					url.includes('set_plan') ||
-					url.includes('change_plan')
-				) {
+				if (shouldLogRequest(url)) {
+					let parsedBody = null;
 					init = init || {};
 					init.body = updateRequestBody(url, init.body);
+					parsedBody = parseMaybeJSONSafe(init.body);
+					return originalFetch(input, init).then(async (response) => {
+						try {
+							const cloned = response.clone();
+							const data = await cloned.json();
+							logRequestResponse(url, parsedBody, data);
+						} catch (error) {
+							// Ignore non-JSON responses.
+						}
+						return response;
+					});
 				}
 			} catch (error) {
 				// Leave the request untouched if interception fails.
@@ -706,14 +756,18 @@
 			try {
 				if (isExcludedRoute()) return originalSend.call(this, body);
 
-				if (
-					(this.__erpnextSeatBillingUrl || '').includes('press.api.client.run_doc_method') ||
-					(this.__erpnextSeatBillingUrl || '').includes('set_plan') ||
-					(this.__erpnextSeatBillingUrl || '').includes('change_plan') ||
-					(this.__erpnextSeatBillingUrl || '').includes('press.api.site.new') ||
-					(this.__erpnextSeatBillingUrl || '').includes('press.api.client.insert')
-				) {
-					body = updateRequestBody(this.__erpnextSeatBillingUrl, body);
+				if (shouldLogRequest(this.__erpnextSeatBillingUrl)) {
+					const updatedBody = updateRequestBody(this.__erpnextSeatBillingUrl, body);
+					const parsedBody = parseMaybeJSONSafe(updatedBody);
+					this.addEventListener('load', () => {
+						try {
+							const data = parseMaybeJSONSafe(this.responseText);
+							logRequestResponse(this.__erpnextSeatBillingUrl, parsedBody, data);
+						} catch (error) {
+							// Ignore response parsing failures.
+						}
+					});
+					body = updatedBody;
 				}
 			} catch (error) {
 				// Ignore and keep the original body.
