@@ -10,6 +10,8 @@
 		plans: [],
 		selectedPlan: null,
 		billableSeats: 1,
+		activeSubscription: null,
+		activeSubscriptionContext: null,
 		panel: null,
 		planGrid: null,
 		step: 1, // 1: Plan selection, 2: Seat selection
@@ -188,6 +190,36 @@
 		log('Locale loaded:', { country: state.country, currency: state.currency });
 	}
 
+	function getCurrentManagedSite() {
+		return window.frappe?.boot?.sitename || window.frappe?.boot?.site || null;
+	}
+
+	async function loadCurrentSubscription() {
+		if (state.activeSubscriptionContext) return state.activeSubscriptionContext;
+
+		const site = getCurrentManagedSite();
+		if (!site) return null;
+
+		try {
+			const response = await fetch(
+				`/api/method/erpnext_saas_model.api.site.get_current_subscription_context?site=${encodeURIComponent(site)}`,
+				{ credentials: 'same-origin' },
+			);
+			const data = await response.json();
+			state.activeSubscription = data?.message?.subscription || null;
+			state.activeSubscriptionContext = data?.message?.current || null;
+			log('Loaded active subscription context:', {
+				site,
+				subscription: state.activeSubscription,
+				context: state.activeSubscriptionContext,
+			});
+			return state.activeSubscriptionContext;
+		} catch (error) {
+			log('Failed to load active subscription context', error);
+			return null;
+		}
+	}
+
 	function getSelectedPlanFromGrid(grid) {
 		if (!grid) return null;
 		const buttons = Array.from(grid.querySelectorAll('button'));
@@ -298,11 +330,21 @@
 		state.panel.style.display = '';
 
 		const plan = state.selectedPlan;
-		state.billableSeats = clampSeats(plan, state.billableSeats);
+		const activeSubscriptionSeats = Number(
+			state.activeSubscriptionContext?.billable_seats ||
+				state.activeSubscriptionContext?.subscription?.billable_seats ||
+				state.activeSubscriptionContext?.current?.billable_seats ||
+				0,
+		);
+		const initialSeats = activeSubscriptionSeats || Number(plan.min_seats || 1);
+		state.billableSeats = clampSeats(plan, state.billableSeats || initialSeats);
 
 		const minSeats = Number(plan.min_seats || 1);
 		const maxSeats = Number(plan.max_seats || 0);
 		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
+		const currentSubscriptionText = state.activeSubscriptionContext
+			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats}`
+			: `Defaulting to plan minimum of ${initialSeats}`;
 
 		const seatRangeText = maxSeats
 			? `Min ${minSeats} seats · Up to ${maxSeats} seats`
@@ -319,6 +361,7 @@
 					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
 					<div class="text-sm font-medium text-ink-gray-9">Configure Seats</div>
 					<div class="text-xs text-ink-gray-6" data-role="seat-range"></div>
+					<div class="text-xs text-ink-gray-6 mt-1">${currentSubscriptionText}</div>
 				</div>
 				<div class="text-right">
 					<div class="text-xs text-ink-gray-6">Monthly total</div>
@@ -387,9 +430,18 @@
 
 		if (selected) {
 			log('Current selection:', selected.name);
+			const activeSubscriptionSeats = Number(
+				state.activeSubscriptionContext?.billable_seats ||
+					state.activeSubscriptionContext?.subscription?.billable_seats ||
+					state.activeSubscriptionContext?.current?.billable_seats ||
+					0,
+			);
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
-				state.billableSeats = clampSeats(selected, 1);
+				state.billableSeats = clampSeats(
+					selected,
+					activeSubscriptionSeats || selected.min_seats || 1,
+				);
 				state.step = isSeatBased(selected) ? 2 : 1;
 				log('Plan changed to:', selected.name);
 				renderPanel(); // Only render on actual plan change
@@ -699,6 +751,17 @@
 		};
 
 		console.log('[Seat Billing Debug]', debugPayload);
+
+		const method = requestBody?.method || requestBody?.cmd || responseData?.method || null;
+		const shouldRefresh =
+			!responseData?.exception &&
+			(method === 'set_plan' || method === 'change_plan' || (url || '').includes('set_plan') || (url || '').includes('change_plan'));
+
+		if (shouldRefresh) {
+			window.setTimeout(() => {
+				window.location.reload();
+			}, 250);
+		}
 	}
 
 	function patchFetch() {
@@ -852,7 +915,7 @@
 		observe();
 
 		try {
-			await Promise.all([loadPlans(), loadLocale()]);
+			await Promise.all([loadPlans(), loadLocale(), loadCurrentSubscription()]);
 		} catch (error) {
 			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
 			return;

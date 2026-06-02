@@ -9,7 +9,9 @@ from press.api.site import get_site_plans as get_press_site_plans
 from press.api.site import change_plan as change_press_plan
 
 from erpnext_saas_model.seat_billing import get_active_user_count
+from erpnext_saas_model.seat_billing import get_seat_billing_dashboard
 from erpnext_saas_model.seat_billing import get_site_seat_limit_context
+from erpnext_saas_model.seat_billing import get_subscription_seat_context
 from erpnext_saas_model.seat_billing import is_seat_based_plan
 
 
@@ -94,6 +96,34 @@ def change_plan(name, plan, billable_seats=None, price_usd=None):
 		return
 
 	return change_press_plan(name, plan)
+
+
+@frappe.whitelist()
+def get_seat_billing_context(subscription=None):
+	return get_seat_billing_dashboard(subscription=subscription)
+
+
+@frappe.whitelist()
+def get_current_subscription_context(site=None, subscription=None):
+	if subscription:
+		subscription_doc = frappe.get_doc("Subscription", subscription)
+	elif site:
+		site_doc = frappe.get_doc("Site", site)
+		subscription_doc = getattr(site_doc, "subscription", None)
+	else:
+		subscription_doc = None
+
+	if not subscription_doc:
+		return {"subscription": None, "current": None}
+
+	current = get_subscription_seat_context(subscription_doc.name)
+	current["name"] = subscription_doc.name
+	current["subscription"] = subscription_doc.as_dict()
+	current["site"] = getattr(subscription_doc, "site", None) or (
+		subscription_doc.document_name if subscription_doc.document_type == "Site" else None
+	)
+	current["active_user_count"] = get_active_user_count(current["site"]) if current["site"] else 0
+	return {"subscription": subscription_doc.name, "current": current}
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
