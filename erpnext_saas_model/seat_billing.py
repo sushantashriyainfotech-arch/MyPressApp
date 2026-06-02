@@ -216,6 +216,22 @@ def _extract_users_from_analytics(analytics_payload: dict[str, Any] | None) -> l
 	return users if isinstance(users, list) else []
 
 
+def _get_subscription_site_name(subscription_doc: dict[str, Any]) -> str | None:
+	"""
+	Resolve the site name associated with a subscription.
+	Prefer the explicit `site` link, but fall back to the subscribed document
+	for legacy Site subscriptions where `site` was not backfilled yet.
+	"""
+	site_name = subscription_doc.get("site")
+	if site_name:
+		return site_name
+
+	if subscription_doc.get("document_type") == "Site":
+		return subscription_doc.get("document_name")
+
+	return None
+
+
 def _get_site_analytics(site_name: str) -> dict[str, Any]:
 	"""Fetches real-time site analytics (including user state) from the Press Agent."""
 	site = frappe.get_cached_doc("Site", site_name)
@@ -555,7 +571,8 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 		}
 
 	# Ensure they don't buy fewer seats than they have active users
-	active_user_count = get_active_user_count(subscription_doc["site"])
+	site_name = _get_subscription_site_name(subscription_doc)
+	active_user_count = get_active_user_count(site_name) if site_name else 0
 	if new_seats < active_user_count:
 		frappe.throw(
 			_("You have {0} active users. Please deactivate users before reducing your seat count.").format(

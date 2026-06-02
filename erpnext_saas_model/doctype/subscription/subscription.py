@@ -237,9 +237,10 @@ class Subscription(PressSubscription):
 
 	def get_active_user_count(self) -> int:
 		"""Returns the count of enabled users on the linked Site."""
-		if not self.site:
+		site_name = self.site or (self.document_name if self.document_type == "Site" else None)
+		if not site_name:
 			return 0
-		return get_active_user_count(self.site)
+		return get_active_user_count(site_name)
 
 	def get_seat_context(self) -> dict[str, object]:
 		"""Fetches metadata required for seat selection UI (plan limits, current count, etc.)."""
