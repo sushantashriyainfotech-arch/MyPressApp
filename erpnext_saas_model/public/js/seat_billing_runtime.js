@@ -195,10 +195,16 @@
 	}
 
 	async function loadCurrentSubscription() {
-		if (state.activeSubscriptionContext) return state.activeSubscriptionContext;
+		if (state.activeSubscriptionContext) {
+			log('Active subscription context already loaded', state.activeSubscriptionContext);
+			return state.activeSubscriptionContext;
 
+		}
 		const site = getCurrentManagedSite();
-		if (!site) return null;
+		if (!site) {
+			log('No managed site found in boot data');
+			return null;
+		};
 
 		try {
 			const response = await fetch(
@@ -332,9 +338,9 @@
 		const plan = state.selectedPlan;
 		const activeSubscriptionSeats = Number(
 			state.activeSubscriptionContext?.billable_seats ||
-				state.activeSubscriptionContext?.subscription?.billable_seats ||
-				state.activeSubscriptionContext?.current?.billable_seats ||
-				0,
+			state.activeSubscriptionContext?.subscription?.billable_seats ||
+			state.activeSubscriptionContext?.current?.billable_seats ||
+			0,
 		);
 		const initialSeats = activeSubscriptionSeats || Number(plan.min_seats || 1);
 		state.billableSeats = clampSeats(plan, state.billableSeats || initialSeats);
@@ -432,9 +438,9 @@
 			log('Current selection:', selected.name);
 			const activeSubscriptionSeats = Number(
 				state.activeSubscriptionContext?.billable_seats ||
-					state.activeSubscriptionContext?.subscription?.billable_seats ||
-					state.activeSubscriptionContext?.current?.billable_seats ||
-					0,
+				state.activeSubscriptionContext?.subscription?.billable_seats ||
+				state.activeSubscriptionContext?.current?.billable_seats ||
+				0,
 			);
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
