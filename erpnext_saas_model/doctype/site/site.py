@@ -62,6 +62,29 @@ class Site(PressSite):
 			)
 		return self.billable_seats
 
+	@property
+	def subscription(self):
+		"""
+		Resolve the linked subscription in a stable order.
+		Prefer the explicit `Subscription.site` link when present, then fall back
+		to the historical Site linkage used by older records.
+		"""
+		lookups = (
+			{"site": self.name, "document_type": "Site"},
+			{"document_type": "Site", "document_name": self.name, "team": self.team},
+			{"document_type": "Site", "document_name": self.name},
+		)
+		for filters in lookups:
+			subscription_name = frappe.db.get_value(
+				"Subscription",
+				filters,
+				"name",
+				order_by="modified desc",
+			)
+			if subscription_name:
+				return frappe.get_doc("Subscription", subscription_name)
+		return None
+
 	def _throw_plan_limit_error(self, validation: dict) -> None:
 		"""Raise the user-facing plan upgrade hint when seat count exceeds the plan."""
 		suggested_plan = validation.get("suggested_plan")
@@ -78,6 +101,10 @@ class Site(PressSite):
 			return {"billable_seats": requested_seats}
 
 		subscription = frappe.get_doc("Subscription", subscription_name)
+		if getattr(subscription, "team", None) != getattr(self, "team", None):
+			frappe.throw("The linked subscription does not belong to this site team.")
+		if getattr(subscription, "site", None) and getattr(subscription, "site", None) != self.name:
+			frappe.throw("The linked subscription does not belong to this site.")
 		return subscription.update_billable_seats(requested_seats)
 
 	@dashboard_whitelist()
