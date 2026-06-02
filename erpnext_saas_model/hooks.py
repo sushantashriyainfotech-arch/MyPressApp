@@ -209,7 +209,9 @@ override_whitelisted_methods = {
 	"press.api.site.get_site_plans": "erpnext_saas_model.api.site.get_site_plans",
 	"press.api.site.change_plan": "erpnext_saas_model.api.site.change_plan",
 	"press.api.team.get_current_team": "erpnext_saas_model.api.team.get_current_team",
+    "press.api.site.get_current_subscription_context": "erpnext_saas_model.api.site.get_current_subscription_context"
 }
+
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
