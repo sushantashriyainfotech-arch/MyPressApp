@@ -62,28 +62,28 @@ class Site(PressSite):
 			)
 		return self.billable_seats
 
-	@property
-	def subscription(self):
-		"""
-		Resolve the linked subscription in a stable order.
-		Prefer the explicit `Subscription.site` link when present, then fall back
-		to the historical Site linkage used by older records.
-		"""
-		lookups = (
-			{"site": self.name, "document_type": "Site"},
-			{"document_type": "Site", "document_name": self.name, "team": self.team},
-			{"document_type": "Site", "document_name": self.name},
-		)
-		for filters in lookups:
-			subscription_name = frappe.db.get_value(
-				"Subscription",
-				filters,
-				"name",
-				order_by="modified desc",
-			)
-			if subscription_name:
-				return frappe.get_doc("Subscription", subscription_name)
-		return None
+	# @property
+	# def subscription(self):
+	# 	"""
+	# 	Resolve the linked subscription in a stable order.
+	# 	Prefer the explicit `Subscription.site` link when present, then fall back
+	# 	to the historical Site linkage used by older records.
+	# 	"""
+	# 	lookups = (
+	# 		{"site": self.name, "document_type": "Site"},
+	# 		{"document_type": "Site", "document_name": self.name, "team": self.team},
+	# 		{"document_type": "Site", "document_name": self.name},
+	# 	)
+	# 	for filters in lookups:
+	# 		subscription_name = frappe.db.get_value(
+	# 			"Subscription",
+	# 			filters,
+	# 			"name",
+	# 			order_by="modified desc",
+	# 		)
+	# 		if subscription_name:
+	# 			return frappe.get_doc("Subscription", subscription_name)
+	# 	return None
 
 	def _throw_plan_limit_error(self, validation: dict) -> None:
 		"""Raise the user-facing plan upgrade hint when seat count exceeds the plan."""
