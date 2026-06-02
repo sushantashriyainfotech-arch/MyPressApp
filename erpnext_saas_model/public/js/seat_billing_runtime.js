@@ -136,11 +136,9 @@
 
 	function clampSeats(plan, seats) {
 		const minSeats = Number(plan?.min_seats || 1);
-		const maxSeats = Number(plan?.max_seats || 0);
 		let nextSeats = Number(seats || minSeats || 1);
 
 		if (nextSeats < minSeats) nextSeats = minSeats;
-		if (maxSeats && nextSeats > maxSeats) nextSeats = maxSeats;
 		return nextSeats;
 	}
 
@@ -311,8 +309,8 @@
 			: `Min ${minSeats} seats`;
 		const warningText = shouldShowWarning(plan, state.billableSeats)
 			? plan.next_plan
-				? `This plan supports up to ${maxSeats} seats. Consider upgrading to ${plan.next_plan}.`
-				: `This plan supports up to ${maxSeats} seats.`
+				? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
+				: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
 			: '';
 
 		state.panel.innerHTML = `
@@ -327,15 +325,14 @@
 					<div class="text-xl font-bold text-ink-primary" data-role="seat-total"></div>
 				</div>
 			</div>
-			<div class="mt-6 grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
-				<label class="text-sm font-medium text-ink-gray-8">How many seats?</label>
-				<div class="flex items-center gap-2">
-					<input
-						type="number"
-						min="${minSeats}"
-						${maxSeats ? `max="${maxSeats}"` : ''}
-						class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
-						data-role="seat-input"
+				<div class="mt-6 grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
+					<label class="text-sm font-medium text-ink-gray-8">How many seats?</label>
+					<div class="flex items-center gap-2">
+						<input
+							type="number"
+							min="${minSeats}"
+							class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
+							data-role="seat-input"
 					/>
 					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(plan.price_per_seat)} per seat</span>
 				</div>
@@ -368,8 +365,8 @@
 			state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(newTotal);
 			const newWarning = shouldShowWarning(plan, state.billableSeats)
 				? plan.next_plan
-					? `This plan supports up to ${maxSeats} seats. Consider upgrading to ${plan.next_plan}.`
-					: `This plan supports up to ${maxSeats} seats.`
+					? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
+					: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
 				: '';
 			const w = state.panel.querySelector('[data-role="seat-warning"]');
 			w.textContent = newWarning;

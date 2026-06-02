@@ -47,12 +47,38 @@ class Site(PressSite):
 		# Cross-verify with plan configuration
 		validation = validate_seat_selection_for_plan(None, plan, requested_seats)
 		if validation.get("error_code") == "SEATS_EXCEED_PLAN_LIMIT":
-			suggested_plan = validation.get("suggested_plan")
-			if suggested_plan:
-				frappe.throw(
-					f"Requested seats exceed the current plan limit. Please choose {suggested_plan} or fewer seats."
-				)
-			frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
+			self._throw_plan_limit_error(validation)
+
+	def _set_billable_seats(self, billable_seats: int) -> int:
+		"""Persist the current site seat count without triggering a full plan change."""
+		self.billable_seats = cint(billable_seats)
+		if self.name:
+			frappe.db.set_value(
+				"Site",
+				self.name,
+				"billable_seats",
+				self.billable_seats,
+				update_modified=False,
+			)
+		return self.billable_seats
+
+	def _throw_plan_limit_error(self, validation: dict) -> None:
+		"""Raise the user-facing plan upgrade hint when seat count exceeds the plan."""
+		suggested_plan = validation.get("suggested_plan")
+		if suggested_plan:
+			frappe.throw(
+				f"Requested seats exceed the current plan limit. Please choose {suggested_plan} or fewer seats."
+			)
+		frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
+
+	def _update_seat_count_for_current_plan(self, requested_seats: int):
+		"""Handle seat-only changes without involving the Press plan-change workflow."""
+		subscription_name = getattr(self, "subscription", None)
+		if not subscription_name:
+			return {"billable_seats": requested_seats}
+
+		subscription = frappe.get_doc("Subscription", subscription_name)
+		return subscription.update_billable_seats(requested_seats)
 
 	@dashboard_whitelist()
 	def set_plan(
@@ -70,27 +96,26 @@ class Site(PressSite):
 			if billable_seats is None:
 				billable_seats = cint(getattr(self, "billable_seats", 0) or getattr(plan_doc, "min_seats", 1))
 
-			if billable_seats is not None and self.name:
-				self.billable_seats = cint(billable_seats)
-				frappe.db.set_value(
-					"Site",
-					self.name,
-					"billable_seats",
-					self.billable_seats,
-					update_modified=False,
-				)
+			requested_seats = cint(billable_seats)
+			validation = validate_seat_selection_for_plan(self.name, plan_doc, requested_seats)
+			if validation.get("error_code") == "SEATS_EXCEED_PLAN_LIMIT":
+				self._throw_plan_limit_error(validation)
+
+			current_plan = getattr(self, "subscription_plan", None) or getattr(self, "plan", None)
+			current_seats = cint(getattr(self, "billable_seats", 0) or 0)
+			self._set_billable_seats(requested_seats)
+
+			if current_plan == plan:
+				if current_seats == requested_seats:
+					return validation
+
+				return self._update_seat_count_for_current_plan(requested_seats)
+
 			result = self.change_plan(plan)
 			return result
 
 		if billable_seats is not None and self.name:
-			self.billable_seats = cint(billable_seats)
-			frappe.db.set_value(
-				"Site",
-				self.name,
-				"billable_seats",
-				self.billable_seats,
-				update_modified=False,
-			)
+			self._set_billable_seats(billable_seats)
 
 		return super().set_plan(plan)
 
