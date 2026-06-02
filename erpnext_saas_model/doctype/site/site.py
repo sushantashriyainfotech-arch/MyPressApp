@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import frappe
 from frappe.utils import cint
 
@@ -97,10 +99,40 @@ class Site(PressSite):
 	def _update_seat_count_for_current_plan(self, requested_seats: int):
 		"""Handle seat-only changes without involving the Press plan-change workflow."""
 		subscription_name = getattr(self, "subscription", None)
+		logger = frappe.logger("erpnext_saas_model.seat_debug")
+		logger.info(
+			json.dumps(
+				{
+					"event": "site.update_seat_count.enter",
+					"site": self.name,
+					"team": getattr(self, "team", None),
+					"requested_seats": requested_seats,
+					"subscription_name": getattr(subscription_name, "name", subscription_name),
+					"subscription_team": getattr(subscription_name, "team", None),
+					"subscription_site": getattr(subscription_name, "site", None),
+					"subscription_document_name": getattr(subscription_name, "document_name", None),
+				},
+				default=str,
+			)
+		)
 		if not subscription_name:
 			return {"billable_seats": requested_seats}
 
 		subscription = frappe.get_doc("Subscription", subscription_name)
+		logger.info(
+			json.dumps(
+				{
+					"event": "site.update_seat_count.loaded",
+					"site": self.name,
+					"team": getattr(self, "team", None),
+					"subscription_name": getattr(subscription, "name", None),
+					"subscription_team": getattr(subscription, "team", None),
+					"subscription_site": getattr(subscription, "site", None),
+					"subscription_document_name": getattr(subscription, "document_name", None),
+				},
+				default=str,
+			)
+		)
 		if getattr(subscription, "team", None) != getattr(self, "team", None):
 			frappe.throw("The linked subscription does not belong to this site team.")
 		if getattr(subscription, "site", None) and getattr(subscription, "site", None) != self.name:
@@ -118,6 +150,21 @@ class Site(PressSite):
 		Helper to update both the plan and the billable seat count atomically.
 		Updates the database directly for immediate reflection in the UI.
 		"""
+		frappe.logger("erpnext_saas_model.seat_debug").info(
+			json.dumps(
+				{
+					"event": "site.set_plan.called",
+					"site": self.name,
+					"team": getattr(self, "team", None),
+					"plan": plan,
+					"billable_seats": billable_seats,
+					"price_usd": price_usd,
+					"current_plan": getattr(self, "subscription_plan", None) or getattr(self, "plan", None),
+					"current_billable_seats": getattr(self, "billable_seats", None),
+				},
+				default=str,
+			)
+		)
 		plan_doc = frappe.get_cached_doc("Site Plan", plan) if plan else None
 		if plan_doc and is_seat_based_plan(plan_doc):
 			if billable_seats is None:
