@@ -98,7 +98,7 @@ class Site(PressSite):
 
 	def _update_seat_count_for_current_plan(self, requested_seats: int):
 		"""Handle seat-only changes without involving the Press plan-change workflow."""
-		subscription_name = getattr(self, "subscription", None)
+		subscription = getattr(self, "subscription", None)
 		logger = frappe.logger("erpnext_saas_model.seat_debug")
 		logger.info(
 			json.dumps(
@@ -107,18 +107,20 @@ class Site(PressSite):
 					"site": self.name,
 					"team": getattr(self, "team", None),
 					"requested_seats": requested_seats,
-					"subscription_name": getattr(subscription_name, "name", subscription_name),
-					"subscription_team": getattr(subscription_name, "team", None),
-					"subscription_site": getattr(subscription_name, "site", None),
-					"subscription_document_name": getattr(subscription_name, "document_name", None),
+					"subscription_name": getattr(subscription, "name", subscription),
+					"subscription_team": getattr(subscription, "team", None),
+					"subscription_site": getattr(subscription, "site", None),
+					"subscription_document_name": getattr(subscription, "document_name", None),
 				},
 				default=str,
 			)
 		)
-		if not subscription_name:
+		if not subscription:
 			return {"billable_seats": requested_seats}
 
-		subscription = frappe.get_doc("Subscription", subscription_name)
+		if isinstance(subscription, str):
+			subscription = frappe.get_doc("Subscription", subscription)
+
 		logger.info(
 			json.dumps(
 				{
