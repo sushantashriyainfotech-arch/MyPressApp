@@ -15,7 +15,7 @@
 		panel: null,
 		planGrid: null,
 		planGridDialog: null,
-		planGridDialogBound: null,
+		planGridDialogCloseBound: false,
 		step: 1, // 1: Plan selection, 2: Seat selection
 		currency: 'USD',
 		country: 'United States',
@@ -419,11 +419,11 @@
 		return Boolean(button.querySelector('svg.lucide-x, svg[class*="lucide-x"], svg path[d="M18 6 6 18"], svg path[d="m6 6 12 12"]'));
 	}
 
-	function bindPlanGridDialog(dialog) {
-		if (!dialog || state.planGridDialogBound === dialog) return;
-		state.planGridDialogBound = dialog;
+	function bindPlanGridDialog() {
+		if (state.planGridDialogCloseBound) return;
+		state.planGridDialogCloseBound = true;
 
-		const clearOnClose = () => {
+		const clearOnClose = (dialog) => {
 			window.setTimeout(() => {
 				clearPlanGridAlerts(dialog);
 			}, 0);
@@ -432,33 +432,17 @@
 			}, 250);
 		};
 
-		// dialog.addEventListener(
-		// 	'pointerdown',
-		// 	(event) => {
-		// 		const button = event.target?.closest?.('button');
-		// 		if (!isDialogCloseButton(button)) return;
-		// 		clearOnClose();
-		// 	},
-		// 	true,
-		// );
-
-		dialog.addEventListener(
+		document.addEventListener(
 			'click',
 			(event) => {
 				const button = event.target?.closest?.('button');
 				if (!isDialogCloseButton(button)) return;
-				clearOnClose();
+
+				const dialog = button.closest('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"]');
+				clearOnClose(dialog || state.planGridDialog || getPlanGridDialog());
 			},
 			true,
 		);
-
-		// dialog.addEventListener(
-		// 	'transitionend',
-		// 	() => {
-		// 		clearPlanGridAlerts(dialog);
-		// 	},
-		// 	true,
-		// );
 	}
 
 	function getVisibleModalContainers() {
@@ -673,7 +657,6 @@
 			clearPlanGridAlerts(modal);
 			state.planGrid = null;
 			state.planGridDialog = null;
-			state.planGridDialogBound = null;
 			state.selectedPlan = null;
 			state.step = 1;
 			return;
@@ -683,7 +666,7 @@
 			log('Found plan grid');
 			state.planGrid = grid;
 			state.planGridDialog = modal;
-			bindPlanGridDialog(modal);
+			bindPlanGridDialog();
 			bindPlanGrid(grid);
 			refreshSelection();
 		}
