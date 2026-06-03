@@ -354,6 +354,23 @@
 		state.panel.innerHTML = '';
 	}
 
+	function clearPlanGridAlerts() {
+		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
+		for (const dialog of dialogs) {
+			const alerts = Array.from(dialog.querySelectorAll('[role="alert"]'));
+			for (const alert of alerts) {
+				const text = (alert.textContent || '').trim();
+				if (
+					text.includes('active users') ||
+					text.includes('deactivate users before reducing your seat count') ||
+					text.includes('billable seat limit')
+				) {
+					alert.remove();
+				}
+			}
+		}
+	}
+
 	function renderStep2() {
 		// Step 2 shows the seat editor while keeping the plan grid visible.
 		if (!state.panel) return;
@@ -488,6 +505,7 @@
 				state.selectedPlan = null;
 				state.step = 1;
 				resetPanel();
+				clearPlanGridAlerts();
 				renderPanel(); // Only render on actual change
 			}
 		}
@@ -548,6 +566,7 @@
 		if (!grid) {
 			if (state.planGrid) log('Plan grid lost');
 			resetPanel();
+			clearPlanGridAlerts();
 			state.planGrid = null;
 			state.selectedPlan = null;
 			state.step = 1;
