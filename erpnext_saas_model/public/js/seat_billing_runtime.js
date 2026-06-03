@@ -43,6 +43,16 @@
 			.replace(/[^a-z0-9]+/g, '');
 	}
 
+	function isVisibleElement(el) {
+		if (!el || !el.isConnected) return false;
+		if (typeof el.getAttribute === 'function' && el.getAttribute('data-state') && el.getAttribute('data-state') !== 'open') {
+			return false;
+		}
+		const style = window.getComputedStyle(el);
+		if (style.display === 'none' || style.visibility === 'hidden') return false;
+		return true;
+	}
+
 	function isExcludedRoute() {
 		const path = window.location.pathname || '';
 		return EXCLUDED_ROUTE_HINTS.some((hint) => {
@@ -82,9 +92,7 @@
 		try {
 			const res = await fetch('/api/method/press.api.team.get_current_team', {
 				credentials: 'same-origin',
-			}
-
-			);
+			});
 			const data = await res.json();
 
 			log('Fetched team data:', data?.message);
@@ -142,6 +150,29 @@
 
 		if (nextSeats < minSeats) nextSeats = minSeats;
 		return nextSeats;
+	}
+
+	function getActiveUserCount() {
+		return Number(
+			state.activeSubscriptionContext?.active_user_count ||
+			state.activeSubscriptionContext?.current?.active_user_count ||
+			0,
+		);
+	}
+
+	function getInitialSeatCount(plan) {
+		const activeUserCount = getActiveUserCount();
+		const activeSubscriptionSeats = Number(
+			state.activeSubscriptionContext?.billable_seats ||
+			state.activeSubscriptionContext?.subscription?.billable_seats ||
+			state.activeSubscriptionContext?.current?.billable_seats ||
+			0,
+		);
+		return Math.max(
+			Number(plan?.min_seats || 1),
+			activeSubscriptionSeats,
+			activeUserCount,
+		);
 	}
 
 	function findPlanByName(planName) {
@@ -348,14 +379,28 @@
 		}
 	}
 
+	function getPlanGridDialog(grid = state.planGrid) {
+		if (!grid) return null;
+		return (
+			grid.closest('[data-dismissable-layer][role="dialog"]') ||
+			grid.closest('[role="dialog"][data-dismissable-layer]') ||
+			grid.closest('[role="dialog"]') ||
+			grid.closest('[data-dismissable-layer]') ||
+			null
+		);
+	}
+
 	function resetPanel() {
 		if (!state.panel) return;
 		state.panel.style.display = 'none';
 		state.panel.innerHTML = '';
 	}
 
-	function clearPlanGridAlerts() {
-		const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+	function clearPlanGridAlerts(scope = null) {
+		const root = scope || getPlanGridDialog();
+		if (!root) return;
+
+		const alerts = Array.from(root.querySelectorAll('[role="alert"]'));
 		for (const alert of alerts) {
 			const text = (alert.textContent || '').trim();
 			if (
@@ -368,6 +413,12 @@
 		}
 	}
 
+	function getVisibleModalContainers() {
+		return Array.from(
+			document.querySelectorAll('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"], .modal.show, .modal[style*="display: block"], .modal-dialog, .modal-content'),
+		).filter(isVisibleElement);
+	}
+
 	function renderStep2() {
 		// Step 2 shows the seat editor while keeping the plan grid visible.
 		if (!state.panel) return;
@@ -376,20 +427,21 @@
 		state.panel.style.display = '';
 
 		const plan = state.selectedPlan;
+		const activeUserCount = getActiveUserCount();
 		const activeSubscriptionSeats = Number(
 			state.activeSubscriptionContext?.billable_seats ||
 			state.activeSubscriptionContext?.subscription?.billable_seats ||
 			state.activeSubscriptionContext?.current?.billable_seats ||
 			0,
 		);
-		const initialSeats = activeSubscriptionSeats || Number(plan.min_seats || 1);
+		const initialSeats = getInitialSeatCount(plan);
 		state.billableSeats = clampSeats(plan, state.billableSeats || initialSeats);
 
 		const minSeats = Number(plan.min_seats || 1);
 		const maxSeats = Number(plan.max_seats || 0);
 		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
 		const currentSubscriptionText = state.activeSubscriptionContext
-			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats}`
+			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount}`
 			: `Defaulting to plan minimum of ${initialSeats}`;
 
 		const seatRangeText = maxSeats
@@ -445,9 +497,11 @@
 		warningEl.style.display = warningText ? '' : 'none';
 
 		const input = state.panel.querySelector('[data-role="seat-input"]');
-		input.value = String(state.billableSeats || minSeats);
+		input.min = String(Math.max(minSeats, activeUserCount || 0));
+		input.value = String(state.billableSeats || Math.max(minSeats, activeUserCount || 0));
 		input.oninput = () => {
-			state.billableSeats = clampSeats(plan, input.value);
+			const floorSeats = Math.max(minSeats, activeUserCount || 0);
+			state.billableSeats = Math.max(Number(input.value || 0), floorSeats);
 			input.value = String(state.billableSeats);
 			// Update totals in-place without full re-render to avoid loop
 			const newTotal = Number(state.billableSeats) * Number(plan.price_per_seat || 0);
@@ -476,18 +530,10 @@
 
 		if (selected) {
 			log('Current selection:', selected.name);
-			const activeSubscriptionSeats = Number(
-				state.activeSubscriptionContext?.billable_seats ||
-				state.activeSubscriptionContext?.subscription?.billable_seats ||
-				state.activeSubscriptionContext?.current?.billable_seats ||
-				0,
-			);
+			const initialSeats = getInitialSeatCount(selected);
 			if (state.selectedPlan?.name !== selected.name) {
 				state.selectedPlan = selected;
-				state.billableSeats = clampSeats(
-					selected,
-					activeSubscriptionSeats || selected.min_seats || 1,
-				);
+				state.billableSeats = clampSeats(selected, initialSeats);
 				state.step = isSeatBased(selected) ? 2 : 1;
 				log('Plan changed to:', selected.name);
 				renderPanel(); // Only render on actual plan change
@@ -509,9 +555,10 @@
 	}
 
 	function findPlanGrid() {
-		// Search dialogs first because the plan picker usually lives inside a modal.
-		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
+		// Search modals first because the plan picker usually lives inside a bootstrap modal.
+		const dialogs = getVisibleModalContainers();
 		for (const dialog of dialogs) {
+			if (!isVisibleElement(dialog)) continue;
 			const grid = findGridInContainer(dialog);
 			if (grid) return grid;
 		}
@@ -564,6 +611,17 @@
 			if (state.planGrid) log('Plan grid lost');
 			resetPanel();
 			clearPlanGridAlerts();
+			state.planGrid = null;
+			state.selectedPlan = null;
+			state.step = 1;
+			return;
+		}
+
+		const modal = getPlanGridDialog(grid);
+		if (!isVisibleElement(grid) || (modal && !isVisibleElement(modal))) {
+			if (state.planGrid) log('Plan grid hidden');
+			resetPanel();
+			clearPlanGridAlerts(modal);
 			state.planGrid = null;
 			state.selectedPlan = null;
 			state.step = 1;
