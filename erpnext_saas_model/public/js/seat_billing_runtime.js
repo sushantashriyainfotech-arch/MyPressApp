@@ -228,7 +228,7 @@
 
 		try {
 			const response = await fetch(
-				`/api/method/erpnext_saas_model.api.site.get_current_subscription_context?site=${encodeURIComponent(site)}`,
+				`/api/method/press.api.site.get_current_subscription_context?site=${encodeURIComponent(site)}`,
 				{ credentials: 'same-origin' },
 			);
 			const data = await response.json();
