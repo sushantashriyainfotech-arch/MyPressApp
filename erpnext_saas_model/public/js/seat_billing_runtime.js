@@ -348,6 +348,12 @@
 		}
 	}
 
+	function resetPanel() {
+		if (!state.panel) return;
+		state.panel.style.display = 'none';
+		state.panel.innerHTML = '';
+	}
+
 	function renderStep2() {
 		// Step 2 shows the seat editor while keeping the plan grid visible.
 		if (!state.panel) return;
@@ -481,6 +487,7 @@
 			if (state.selectedPlan !== null) {
 				state.selectedPlan = null;
 				state.step = 1;
+				resetPanel();
 				renderPanel(); // Only render on actual change
 			}
 		}
@@ -540,6 +547,7 @@
 		const grid = findPlanGrid();
 		if (!grid) {
 			if (state.planGrid) log('Plan grid lost');
+			resetPanel();
 			state.planGrid = null;
 			state.selectedPlan = null;
 			state.step = 1;

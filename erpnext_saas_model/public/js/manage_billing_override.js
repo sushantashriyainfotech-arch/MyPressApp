@@ -10,6 +10,7 @@
 
 	function handleManageBillingClick(event) {
 		const target = event.target.closest(".login-to-fc, .upgrade-plan-button");
+		console.log("Clicked element:", event.target);
 		if (!target) return;
 
 		event.preventDefault();
