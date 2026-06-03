@@ -191,6 +191,13 @@
 	}
 
 	function getCurrentManagedSite() {
+		const path = window.location.pathname || '';
+		const match = path.match(/\/dashboard\/sites\/([^/]+)(?:\/|$)/);
+		if (match?.[1]) {
+			log('Resolved managed site from route:', match[1]);
+			return match[1];
+		}
+
 		const bootSite =
 			window.site_name ||
 			window.press_site_name ||
@@ -200,14 +207,8 @@
 			null;
 
 		if (bootSite) {
+			log('Resolved managed site from boot data:', bootSite);
 			return bootSite;
-		}
-
-		const path = window.location.pathname || '';
-		const match = path.match(/\/dashboard\/sites\/([^/]+)(?:\/|$)/);
-		if (match?.[1]) {
-			log('Resolved managed site from route:', match[1]);
-			return match[1];
 		}
 
 		return null;
