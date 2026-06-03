@@ -245,6 +245,10 @@
 		return null;
 	}
 
+	function isManagedSiteOverviewRoute() {
+		return /\/dashboard\/sites\/[^/]+\/overview(?:\/|$)/.test(window.location.pathname || '');
+	}
+
 	async function loadCurrentSubscription() {
 		if (state.activeSubscriptionContext) {
 			log('Active subscription context already loaded', state.activeSubscriptionContext);
@@ -632,6 +636,10 @@
 		// Mounting is idempotent: if the page is relevant and a plan grid exists,
 		// attach to it and sync the current selection.
 		if (!isRelevantRoute()) return;
+
+		if (isManagedSiteOverviewRoute() && !state.activeSubscriptionContext) {
+			loadCurrentSubscription();
+		}
 
 		// Lazy Patching: only arm the network stack interception once we enter
 		// a relevant seat-billing flow.
@@ -1059,7 +1067,7 @@
 		observe();
 
 		try {
-			await Promise.all([loadPlans(), loadLocale(), loadCurrentSubscription()]);
+			await Promise.all([loadPlans(), loadLocale()]);
 		} catch (error) {
 			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
 			return;
