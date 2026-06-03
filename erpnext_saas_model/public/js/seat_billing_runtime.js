@@ -355,18 +355,15 @@
 	}
 
 	function clearPlanGridAlerts() {
-		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
-		for (const dialog of dialogs) {
-			const alerts = Array.from(dialog.querySelectorAll('[role="alert"]'));
-			for (const alert of alerts) {
-				const text = (alert.textContent || '').trim();
-				if (
-					text.includes('active users') ||
-					text.includes('deactivate users before reducing your seat count') ||
-					text.includes('billable seat limit')
-				) {
-					alert.remove();
-				}
+		const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+		for (const alert of alerts) {
+			const text = (alert.textContent || '').trim();
+			if (
+				text.includes('active users') ||
+				text.includes('deactivate users before reducing your seat count') ||
+				text.includes('billable seat limit')
+			) {
+				alert.remove();
 			}
 		}
 	}
