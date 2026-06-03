@@ -14,6 +14,7 @@
 		activeSubscriptionContext: null,
 		panel: null,
 		planGrid: null,
+		planGridDialog: null,
 		step: 1, // 1: Plan selection, 2: Seat selection
 		currency: 'USD',
 		country: 'United States',
@@ -161,7 +162,6 @@
 	}
 
 	function getInitialSeatCount(plan) {
-		const activeUserCount = getActiveUserCount();
 		const activeSubscriptionSeats = Number(
 			state.activeSubscriptionContext?.billable_seats ||
 			state.activeSubscriptionContext?.subscription?.billable_seats ||
@@ -171,7 +171,6 @@
 		return Math.max(
 			Number(plan?.min_seats || 1),
 			activeSubscriptionSeats,
-			activeUserCount,
 		);
 	}
 
@@ -397,7 +396,7 @@
 	}
 
 	function clearPlanGridAlerts(scope = null) {
-		const root = scope || getPlanGridDialog();
+		const root = scope || state.planGridDialog || getPlanGridDialog();
 		if (!root) return;
 
 		const alerts = Array.from(root.querySelectorAll('[role="alert"]'));
@@ -497,10 +496,10 @@
 		warningEl.style.display = warningText ? '' : 'none';
 
 		const input = state.panel.querySelector('[data-role="seat-input"]');
-		input.min = String(Math.max(minSeats, activeUserCount || 0));
-		input.value = String(state.billableSeats || Math.max(minSeats, activeUserCount || 0));
+		input.min = String(minSeats);
+		input.value = String(state.billableSeats || minSeats);
 		input.oninput = () => {
-			const floorSeats = Math.max(minSeats, activeUserCount || 0);
+			const floorSeats = minSeats;
 			state.billableSeats = Math.max(Number(input.value || 0), floorSeats);
 			input.value = String(state.billableSeats);
 			// Update totals in-place without full re-render to avoid loop
@@ -612,6 +611,7 @@
 			resetPanel();
 			clearPlanGridAlerts();
 			state.planGrid = null;
+			state.planGridDialog = null;
 			state.selectedPlan = null;
 			state.step = 1;
 			return;
@@ -623,6 +623,7 @@
 			resetPanel();
 			clearPlanGridAlerts(modal);
 			state.planGrid = null;
+			state.planGridDialog = null;
 			state.selectedPlan = null;
 			state.step = 1;
 			return;
@@ -631,6 +632,7 @@
 		if (state.planGrid !== grid) {
 			log('Found plan grid');
 			state.planGrid = grid;
+			state.planGridDialog = modal;
 			bindPlanGrid(grid);
 			refreshSelection();
 		}
