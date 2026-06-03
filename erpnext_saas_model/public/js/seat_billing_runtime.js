@@ -191,7 +191,26 @@
 	}
 
 	function getCurrentManagedSite() {
-		return window.frappe?.boot?.sitename || window.frappe?.boot?.site || null;
+		const bootSite =
+			window.site_name ||
+			window.press_site_name ||
+			window.frappe?.boot?.site_name ||
+			window.frappe?.boot?.sitename ||
+			window.frappe?.boot?.site ||
+			null;
+
+		if (bootSite) {
+			return bootSite;
+		}
+
+		const path = window.location.pathname || '';
+		const match = path.match(/\/dashboard\/sites\/([^/]+)(?:\/|$)/);
+		if (match?.[1]) {
+			log('Resolved managed site from route:', match[1]);
+			return match[1];
+		}
+
+		return null;
 	}
 
 	async function loadCurrentSubscription() {
