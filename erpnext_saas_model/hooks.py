@@ -209,7 +209,8 @@ override_whitelisted_methods = {
 	"press.api.site.get_site_plans": "erpnext_saas_model.api.site.get_site_plans",
 	"press.api.site.change_plan": "erpnext_saas_model.api.site.change_plan",
 	"press.api.team.get_current_team": "erpnext_saas_model.api.team.get_current_team",
-    "press.api.site.get_current_subscription_context": "erpnext_saas_model.api.site.get_current_subscription_context"
+    "press.api.site.get_current_subscription_context": "erpnext_saas_model.api.site.get_current_subscription_context",
+	"press.api.site.check_user_creation_eligibility": "erpnext_saas_model.api.site.check_user_creation_eligibility"
 }
 
 #
