@@ -89,10 +89,10 @@ class Site(PressSite):
 
 	def _throw_plan_limit_error(self, validation: dict) -> None:
 		"""Raise the user-facing plan upgrade hint when seat count exceeds the plan."""
-		suggested_plan = validation.get("suggested_plan")
-		if suggested_plan:
+		next_plan = validation.get("next_plan")
+		if next_plan:
 			frappe.throw(
-				f"Requested seats exceed the current plan limit. Please choose {suggested_plan} or fewer seats."
+				f"Requested seats exceed the current plan limit. Please choose {next_plan} or fewer seats."
 			)
 		frappe.throw(validation.get("message") or "Requested seats exceed the current plan limit.")
 

@@ -53,7 +53,7 @@ class TestSiteSeatPlanChanges(FrappeTestCase):
 			"validate_seat_selection_for_plan",
 			return_value={
 				"error_code": "SEATS_EXCEED_PLAN_LIMIT",
-				"suggested_plan": "BUSINESS",
+				"next_plan": "BUSINESS",
 				"message": "Requested seats exceed the current plan limit.",
 			},
 		), patch.object(site_module.frappe.db, "set_value") as set_value, patch.object(

@@ -41,55 +41,40 @@ class TestSiteApi(FrappeTestCase):
 
 	def test_check_user_creation_eligibility_allows_within_limit(self):
 		site = SimpleNamespace(name="SITE-001", subscription="SUB-001")
-		plan = SimpleNamespace(
-			name="PRO",
-			plan_title="Pro",
-			billing_type="Seat Based",
-			next_plan="BUSINESS",
-		)
 
 		with patch.object(api_site, "_authenticate_billing_site", return_value=site), patch.object(
 			api_site,
-			"get_site_seat_limit_context",
-			return_value={"plan": "PRO", "billable_seats": 4, "suggested_plan": "BUSINESS"},
-		), patch.object(api_site.frappe, "get_cached_doc", return_value=plan):
-			result = api_site.check_user_creation_eligibility(active_user_count=3)
+			"validate_site_user_seat_limit",
+			return_value=None,
+		) as validate_limit:
+			result = api_site.check_user_creation_eligibility()
 
-		self.assertTrue(result["can_create_user"])
-		self.assertEqual(result["reason"], "WITHIN_LIMIT")
-		self.assertEqual(result["billable_seats"], 4)
-		self.assertEqual(result["active_user_count"], 3)
-		self.assertEqual(result["suggested_plan"], "BUSINESS")
+		validate_limit.assert_called_once_with(site, enabled=True)
+		self.assertTrue(result)
 
 	def test_check_user_creation_eligibility_blocks_at_limit(self):
 		site = SimpleNamespace(name="SITE-001", subscription="SUB-001")
-		plan = SimpleNamespace(
-			name="PRO",
-			plan_title="Pro",
-			billing_type="Seat Based",
-			next_plan="BUSINESS",
-		)
 
 		with patch.object(api_site, "_authenticate_billing_site", return_value=site), patch.object(
 			api_site,
-			"get_site_seat_limit_context",
-			return_value={"plan": "PRO", "billable_seats": 4, "suggested_plan": "BUSINESS"},
-		), patch.object(api_site.frappe, "get_cached_doc", return_value=plan):
-			result = api_site.check_user_creation_eligibility(active_user_count=4)
+			"validate_site_user_seat_limit",
+			side_effect=Exception("Please upgrade your plan."),
+		) as validate_limit:
+			with self.assertRaises(Exception) as excinfo:
+				api_site.check_user_creation_eligibility()
 
-		self.assertFalse(result["can_create_user"])
-		self.assertEqual(result["reason"], "SEAT_LIMIT_REACHED")
-		self.assertIn("Please upgrade to BUSINESS", result["message"])
+		validate_limit.assert_called_once_with(site, enabled=True)
+		self.assertIn("Please upgrade your plan.", str(excinfo.exception))
 
 	def test_check_user_creation_eligibility_fails_without_active_plan(self):
 		site = SimpleNamespace(name="SITE-001", subscription=None)
 
 		with patch.object(api_site, "_authenticate_billing_site", return_value=site), patch.object(
 			api_site,
-			"get_site_seat_limit_context",
-			return_value={"plan": None, "billable_seats": 0, "suggested_plan": None},
+			"validate_site_user_seat_limit",
+			side_effect=Exception("No active subscription found."),
 		):
-			result = api_site.check_user_creation_eligibility(active_user_count=1)
+			with self.assertRaises(Exception) as excinfo:
+				api_site.check_user_creation_eligibility()
 
-		self.assertFalse(result["can_create_user"])
-		self.assertEqual(result["reason"], "NO_ACTIVE_PLAN")
+		self.assertIn("No active subscription found.", str(excinfo.exception))

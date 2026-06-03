@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import frappe
-from frappe.utils import cint, now_datetime
+from frappe.utils import now_datetime
 
 from press.api.site import get_site_plans as get_press_site_plans
 from press.api.site import change_plan as change_press_plan
@@ -13,6 +13,7 @@ from erpnext_saas_model.seat_billing import get_seat_billing_dashboard
 from erpnext_saas_model.seat_billing import get_site_seat_limit_context
 from erpnext_saas_model.seat_billing import get_subscription_seat_context
 from erpnext_saas_model.seat_billing import is_seat_based_plan
+from erpnext_saas_model.seat_billing import validate_site_user_seat_limit
 
 
 def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "info"):
@@ -127,78 +128,22 @@ def get_current_subscription_context(site=None, subscription=None):
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def check_user_creation_eligibility(**data):
-	"""Return whether the tenant may add another enabled user."""
+def check_user_creation_eligibility():
+	"""Return True if the authenticated site may add another user."""
 	site = _authenticate_billing_site()
-	active_user_count = cint(data.get("active_user_count") or 0)
-	if not active_user_count:
-		active_user_count = cint(get_active_user_count(site.name))
-
-	context = get_site_seat_limit_context(site)
-	plan_name = context.get("plan")
-	plan = frappe.get_cached_doc("Site Plan", plan_name) if plan_name else None
-	billable_seats = cint(context.get("billable_seats") or 0)
-	suggested_plan = context.get("suggested_plan")
-
-	response = {
-		"site": site.name,
-		"subscription": getattr(site, "subscription", None),
-		"plan": getattr(plan, "name", None) if plan else None,
-		"plan_title": getattr(plan, "plan_title", None) if plan else None,
-		"billing_type": getattr(plan, "billing_type", None) if plan else None,
-		"billable_seats": billable_seats,
-		"active_user_count": active_user_count,
-		"suggested_plan": suggested_plan,
-		"can_create_user": False,
-		"reason": "NO_ACTIVE_PLAN",
-	}
-
-	if not plan:
+	try:
+		validate_site_user_seat_limit(site, enabled=True)
 		_log_user_eligibility(
-			"user.eligibility",
-			{"site": site.name, "active_user_count": active_user_count},
-			response,
+			"user_creation_eligibility",
+			{"site": site.name},
+			{"can_create_user": True},
+		)
+		return True
+	except Exception as exc:
+		_log_user_eligibility(
+			"user_creation_eligibility",
+			{"site": site.name},
+			{"can_create_user": False, "message": str(exc)},
 			status="warning",
 		)
-		return response
-
-	if getattr(plan, "billing_type", None) != "Seat Based":
-		response.update(
-			{
-				"can_create_user": True,
-				"reason": "RESOURCE_BASED_PLAN",
-				"billable_seats": 0,
-			}
-		)
-		_log_user_eligibility(
-			"user.eligibility",
-			{"site": site.name, "active_user_count": active_user_count},
-			response,
-		)
-		return response
-
-	if not billable_seats:
-		billable_seats = cint(getattr(plan, "min_seats", 0) or 1)
-
-	can_create_user = active_user_count < billable_seats
-	response.update(
-		{
-			"billable_seats": billable_seats,
-			"can_create_user": can_create_user,
-			"reason": "WITHIN_LIMIT" if can_create_user else "SEAT_LIMIT_REACHED",
-		}
-	)
-
-	if not can_create_user:
-		response["message"] = (
-			f"This site has reached its billable seat limit of {billable_seats}. "
-			f"Please upgrade to {suggested_plan or 'the next plan'} to add more users."
-		)
-
-	_log_user_eligibility(
-		"user.eligibility",
-		{"site": site.name, "active_user_count": active_user_count},
-		response,
-		status="warning" if not response["can_create_user"] else "info",
-	)
-	return response
+		frappe.throw(str(exc))

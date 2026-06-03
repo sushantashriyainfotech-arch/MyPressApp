@@ -11,7 +11,9 @@ from erpnext_saas_model import seat_billing
 class TestSiteUserSeatLimit(FrappeTestCase):
 	def test_validate_site_user_seat_limit_raises_when_full(self):
 		with patch.object(
-			seat_billing, "get_site_seat_limit_context", return_value={"billable_seats": 2, "active_user_count": 2, "suggested_plan": "PRO"}
+			seat_billing,
+			"get_site_seat_limit_context",
+			return_value={"billable_seats": 2, "active_user_count": 2, "next_plan": "PRO"},
 		), patch.object(seat_billing.frappe, "throw") as throw:
 			seat_billing.validate_site_user_seat_limit("site-001", enabled=True)
 

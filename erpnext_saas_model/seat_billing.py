@@ -305,7 +305,7 @@ def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, 
 	Builds a compact context payload used when validating site user creation.
 	"""
 	if not site:
-		return {"billable_seats": 0, "active_user_count": 0, "plan": None, "suggested_plan": None}
+		return {"billable_seats": 0, "active_user_count": 0, "plan": None, "next_plan": None}
 
 	site_doc = site if hasattr(site, "doctype") else frappe.get_cached_doc("Site", site)
 	subscription = getattr(site_doc, "subscription", None)
@@ -319,7 +319,7 @@ def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, 
 
 	billable_seats = get_site_billable_seats(site_doc)
 	active_user_count = frappe.db.count("Site User", {"site": site_doc.name, "enabled": 1})
-	suggested_plan = getattr(plan, "next_plan", None) if plan else None
+	next_plan = getattr(plan, "next_plan", None) if plan else None
 
 	return {
 		"site": site_doc.name,
@@ -327,7 +327,7 @@ def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, 
 		"active_user_count": active_user_count,
 		"plan": getattr(plan, "name", None),
 		"plan_title": getattr(plan, "plan_title", None) if plan else None,
-		"suggested_plan": suggested_plan,
+		"next_plan": next_plan,
 	}
 
 
@@ -344,12 +344,12 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 
 	# The current count does not include the pending insert/update, so equal means full.
 	if context["active_user_count"] >= context["billable_seats"]:
-		suggested_plan = context.get("suggested_plan")
-		if suggested_plan:
+		next_plan = context.get("next_plan")
+		if next_plan:
 			frappe.throw(
 				_(
 					"This site has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
-				).format(context["billable_seats"], suggested_plan)
+				).format(context["billable_seats"], next_plan)
 			)
 
 		frappe.throw(
@@ -445,7 +445,7 @@ def get_team_seat_limit_context(team: str | dict[str, Any] | None) -> dict[str, 
 			"active_user_count": 0,
 			"plan": None,
 			"plan_title": None,
-			"suggested_plan": None,
+			"next_plan": None,
 		}
 
 	team_doc = team if hasattr(team, "doctype") else frappe.get_cached_doc("Team", team)
@@ -458,7 +458,7 @@ def get_team_seat_limit_context(team: str | dict[str, Any] | None) -> dict[str, 
 			"active_user_count": 0,
 			"plan": None,
 			"plan_title": None,
-			"suggested_plan": None,
+			"next_plan": None,
 		}
 
 	site_context = get_site_seat_limit_context(site_doc)
@@ -482,12 +482,12 @@ def validate_team_member_seat_limit(team: str | dict[str, Any]) -> dict[str, Any
 		return context
 
 	if context["active_user_count"] >= context["billable_seats"]:
-		suggested_plan = context.get("suggested_plan")
-		if suggested_plan:
+		next_plan = context.get("next_plan")
+		if next_plan:
 			frappe.throw(
 				_(
 					"This team has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
-				).format(context["billable_seats"], suggested_plan)
+				).format(context["billable_seats"], next_plan)
 			)
 
 		frappe.throw(
@@ -566,7 +566,7 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 	if max_seats and new_seats > max_seats:
 		return {
 			"error_code": "SEATS_EXCEED_PLAN_LIMIT",
-			"suggested_plan": getattr(plan, "next_plan", None),
+			"next_plan": getattr(plan, "next_plan", None),
 			"message": _("Requested seats exceed the current plan limit."),
 		}
 
@@ -606,7 +606,7 @@ def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any
 	if max_seats and new_seats > max_seats:
 		return {
 			"error_code": "SEATS_EXCEED_PLAN_LIMIT",
-			"suggested_plan": getattr(plan_doc, "next_plan", None),
+			"next_plan": getattr(plan_doc, "next_plan", None),
 			"message": _("Requested seats exceed the current plan limit."),
 		}
 
