@@ -15,6 +15,7 @@
 		panel: null,
 		planGrid: null,
 		planGridDialog: null,
+		planGridDialogBound: null,
 		step: 1, // 1: Plan selection, 2: Seat selection
 		currency: 'USD',
 		country: 'United States',
@@ -412,6 +413,54 @@
 		}
 	}
 
+	function isDialogCloseButton(button) {
+		if (!button || button.tagName !== 'BUTTON') return false;
+		if (button.dataset?.role === 'seat-billing-ignore-close') return false;
+		return Boolean(button.querySelector('svg.lucide-x, svg[class*="lucide-x"], svg path[d="M18 6 6 18"], svg path[d="m6 6 12 12"]'));
+	}
+
+	function bindPlanGridDialog(dialog) {
+		if (!dialog || state.planGridDialogBound === dialog) return;
+		state.planGridDialogBound = dialog;
+
+		const clearOnClose = () => {
+			window.setTimeout(() => {
+				clearPlanGridAlerts(dialog);
+			}, 0);
+			window.setTimeout(() => {
+				clearPlanGridAlerts(dialog);
+			}, 250);
+		};
+
+		// dialog.addEventListener(
+		// 	'pointerdown',
+		// 	(event) => {
+		// 		const button = event.target?.closest?.('button');
+		// 		if (!isDialogCloseButton(button)) return;
+		// 		clearOnClose();
+		// 	},
+		// 	true,
+		// );
+
+		dialog.addEventListener(
+			'click',
+			(event) => {
+				const button = event.target?.closest?.('button');
+				if (!isDialogCloseButton(button)) return;
+				clearOnClose();
+			},
+			true,
+		);
+
+		// dialog.addEventListener(
+		// 	'transitionend',
+		// 	() => {
+		// 		clearPlanGridAlerts(dialog);
+		// 	},
+		// 	true,
+		// );
+	}
+
 	function getVisibleModalContainers() {
 		return Array.from(
 			document.querySelectorAll('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"], .modal.show, .modal[style*="display: block"], .modal-dialog, .modal-content'),
@@ -624,6 +673,7 @@
 			clearPlanGridAlerts(modal);
 			state.planGrid = null;
 			state.planGridDialog = null;
+			state.planGridDialogBound = null;
 			state.selectedPlan = null;
 			state.step = 1;
 			return;
@@ -633,6 +683,7 @@
 			log('Found plan grid');
 			state.planGrid = grid;
 			state.planGridDialog = modal;
+			bindPlanGridDialog(modal);
 			bindPlanGrid(grid);
 			refreshSelection();
 		}
