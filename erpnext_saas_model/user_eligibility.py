@@ -6,7 +6,7 @@ import frappe
 from frappe.utils import now_datetime
 
 
-def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "warning"):
+def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "info"):
 	entry = {
 		"event_type": event_type,
 		"payload": payload,
