@@ -3,13 +3,33 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta
 from typing import Any
 
+
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime, nowtime
+import json
 
-from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
 SEAT_BILLING_SNAPSHOT_HOUR = 18
+
+
+def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "info"):
+	payload = payload or {}
+	entry = {
+		"event_type": event_type,
+		"payload": payload,
+		"decision": decision,
+		"timestamp": now_datetime(),
+	}
+	message = json.dumps(entry, default=str, sort_keys=True)
+	logger = frappe.logger("erpnext_saas_model.user_eligibility")
+
+	log_method = {
+		"info": logger.info,
+		"warning": logger.warning,
+		"error": logger.error,
+	}.get(status, logger.info)
+	log_method(message)
 
 
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
