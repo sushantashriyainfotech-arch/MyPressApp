@@ -7,6 +7,7 @@ from frappe.utils import now_datetime
 
 
 def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "info"):
+	payload = payload or {}
 	entry = {
 		"event_type": event_type,
 		"payload": payload,
@@ -15,10 +16,10 @@ def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None 
 	}
 	message = json.dumps(entry, default=str, sort_keys=True)
 	logger = frappe.logger("erpnext_saas_model.user_eligibility")
-		
-	if status == "info":
-		logger.info(message)
-	elif status == "warning":
-		logger.warning(message)
-	else:
-		logger.error(message)
+
+	log_method = {
+		"info": logger.info,
+		"warning": logger.warning,
+		"error": logger.error,
+	}.get(status, logger.info)
+	log_method(message)

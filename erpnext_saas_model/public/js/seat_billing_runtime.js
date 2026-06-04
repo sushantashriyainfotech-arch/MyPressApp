@@ -645,7 +645,7 @@
 		}
 
 		if (isManagedSiteOverviewRoute() && !state.activeSubscriptionContext) {
-			loadCurrentSubscription();
+			await loadCurrentSubscription();
 		}
 
 		// Lazy Patching: only arm the network stack interception once we enter
@@ -684,6 +684,14 @@
 			bindPlanGridDialog();
 			bindPlanGrid(grid);
 			refreshSelection();
+		} else if (isManagedSiteOverviewRoute() && state.selectedPlan && isSeatBased(state.selectedPlan)) {
+			// Re-render once the subscription context arrives so the initial seat
+			// count reflects the managed site's current billable seats.
+			const nextSeats = clampSeats(state.selectedPlan, getInitialSeatCount(state.selectedPlan));
+			if (nextSeats !== state.billableSeats) {
+				state.billableSeats = nextSeats;
+				renderPanel();
+			}
 		}
 		// Removed: periodic refreshSelection() call here — was causing the loop
 	}
