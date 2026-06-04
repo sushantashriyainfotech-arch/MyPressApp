@@ -332,32 +332,79 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 	"""
 	Ensures that enabling or creating a site user does not exceed billable seats.
 	"""
-	_log_user_eligibility('validate_site_user_seat_limit', None, {"can_create_user": "not yet", "reason": "initial stage", "next_plan": None})
+	_log_user_eligibility(
+		"validate_site_user_seat_limit.start",
+		{"site": getattr(site, "name", site), "enabled": enabled},
+		status="info",
+	)
 	context = get_site_seat_limit_context(site)
+	_log_user_eligibility(
+		"validate_site_user_seat_limit.context",
+		context,
+		status="info",
+	)
 	if not enabled:
+		_log_user_eligibility(
+			"validate_site_user_seat_limit.skipped",
+			context,
+			{"can_create_user": True, "reason": "DISABLED"},
+			status="info",
+		)
 		return context
 
 	if not context["billable_seats"]:
+		_log_user_eligibility(
+			"validate_site_user_seat_limit.skipped",
+			context,
+			{"can_create_user": True, "reason": "NO_BILLABLE_SEATS"},
+			status="info",
+		)
 		return context
 
 	# The current count does not include the pending insert/update, so equal means full.
+	_log_user_eligibility(
+		"validate_site_user_seat_limit.compare",
+		context,
+		{
+			"billable_seats": context["billable_seats"],
+			"active_user_count": context["active_user_count"],
+			"next_plan": context.get("next_plan"),
+		},
+		status="info",
+	)
 	if context["active_user_count"] >= context["billable_seats"]:
 		next_plan = context.get("next_plan")
 		if next_plan:
-			_log_user_eligibility('count check', context, {"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": next_plan})
+			_log_user_eligibility(
+				"validate_site_user_seat_limit.block",
+				context,
+				{"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": next_plan},
+				status="warning",
+			)
 			frappe.throw(
 				_(
 					"This site has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
 				).format(context["billable_seats"], next_plan)
 			)
 
-		_log_user_eligibility('count check', context, {"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": None})
+		_log_user_eligibility(
+			"validate_site_user_seat_limit.block",
+			context,
+			{"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": None},
+			status="warning",
+		)
 		frappe.throw(
 			_(
 				"This site has reached its billable seat limit of {0}. Please upgrade your plan to add more users."
 			).format(context["billable_seats"])
 		)
 
+	_log_user_eligibility(
+		"validate_site_user_seat_limit.allow",
+		context,
+		{"can_create_user": True, "reason": "WITHIN_LIMIT"},
+		status="info",
+	)
 	return context
 
 
