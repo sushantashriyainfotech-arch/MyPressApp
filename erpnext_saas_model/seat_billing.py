@@ -6,6 +6,8 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime, nowtime
+from erpnext_saas_model.api.site import _log_user_eligibility
+from matplotlib.style import context
 
 SEAT_BILLING_SNAPSHOT_HOUR = 18
 ACTIVE_USER_CACHE_TTL = 60 * 5
@@ -335,6 +337,7 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 	"""
 	Ensures that enabling or creating a site user does not exceed billable seats.
 	"""
+	_log_user_eligibility('validate_site_user_seat_limit', None, {"can_create_user": "not yet", "reason": "initial stage", "next_plan": None})
 	context = get_site_seat_limit_context(site)
 	if not enabled:
 		return context
@@ -346,12 +349,14 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 	if context["active_user_count"] >= context["billable_seats"]:
 		next_plan = context.get("next_plan")
 		if next_plan:
+			_log_user_eligibility('count check', context, {"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": next_plan})
 			frappe.throw(
 				_(
 					"This site has reached its billable seat limit of {0}. Please upgrade to {1} to add more users."
 				).format(context["billable_seats"], next_plan)
 			)
 
+		_log_user_eligibility('count check', context, {"can_create_user": False, "reason": "SEAT_LIMIT_REACHED", "next_plan": None})
 		frappe.throw(
 			_(
 				"This site has reached its billable seat limit of {0}. Please upgrade your plan to add more users."
