@@ -8,12 +8,12 @@ from press.press.doctype.subscription.subscription import Subscription as PressS
 from erpnext_saas_model.seat_billing import (
 	backfill_missing_seat_usage_records,
 	create_seat_usage_record,
-	get_active_user_count,
 	get_billing_effective_from,
 	get_plan_price_per_seat,
 	get_plan_total_price,
 	get_subscription_seat_context,
 	is_seat_based_plan,
+	get_site_user_active_count,
 	log_seat_change,
 	sync_site_access,
 	validate_seat_change,
@@ -240,7 +240,7 @@ class Subscription(PressSubscription):
 		site_name = self.site or (self.document_name if self.document_type == "Site" else None)
 		if not site_name:
 			return 0
-		return get_active_user_count(site_name)
+		return get_site_user_active_count(site_name)
 
 	def get_seat_context(self) -> dict[str, object]:
 		"""Fetches metadata required for seat selection UI (plan limits, current count, etc.)."""

@@ -6,12 +6,10 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime, nowtime
-from matplotlib.style import context
 
 from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
 SEAT_BILLING_SNAPSHOT_HOUR = 18
-ACTIVE_USER_CACHE_TTL = 60 * 5
 
 
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
@@ -134,7 +132,11 @@ def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any
 			current = get_subscription_seat_context(selected_subscription)
 			current["name"] = selected_subscription
 			current["subscription"] = frappe.get_doc("Subscription", selected_subscription).as_dict()
-			active_user_count = get_active_user_count(current["subscription"]["site"]) if current["subscription"].get("site") else 0
+			active_user_count = (
+				get_site_user_active_count(current["subscription"]["site"])
+				if current["subscription"].get("site")
+				else 0
+			)
 			logs = get_seat_change_logs(selected_subscription, limit=10)
 		except Exception:
 			current = None
@@ -245,25 +247,17 @@ def _get_site_analytics(site_name: str) -> dict[str, Any]:
 	return analytics
 
 
+def get_site_user_active_count(site_name: str) -> int:
+	"""Count enabled mirrored users for a site."""
+	if not site_name:
+		return 0
+
+	return frappe.db.count("Site User", {"site": site_name, "enabled": 1})
+
+
 def get_active_user_count(site_name: str) -> int:
-	"""
-	Queries the site to count 'enabled' users.
-	Results are cached for ACTIVE_USER_CACHE_TTL to improve UI performance.
-	"""
-	cache_key = f"erpnext_saas_model:seat_billing:active_users:{site_name}"
-	cached_value = frappe.cache().get_value(cache_key)
-	if cached_value is not None:
-		return cint(cached_value)
-
-	try:
-		analytics = _get_site_analytics(site_name)
-		users = _extract_users_from_analytics(analytics)
-		active_users = sum(1 for user in users if cint(user.get("enabled")))
-	except Exception:
-		frappe.throw(_("Could not verify active user count. Please try again."))
-
-	frappe.cache().set_value(cache_key, active_users, expires_in_sec=ACTIVE_USER_CACHE_TTL)
-	return active_users
+	"""Backwards-compatible alias for the site-user active count."""
+	return get_site_user_active_count(site_name)
 
 
 def get_site_billable_seats(site: str | dict[str, Any] | None) -> int:
@@ -578,7 +572,7 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 
 	# Ensure they don't buy fewer seats than they have active users
 	site_name = _get_subscription_site_name(subscription_doc)
-	active_user_count = get_active_user_count(site_name) if site_name else 0
+	active_user_count = get_site_user_active_count(site_name) if site_name else 0
 	if new_seats < active_user_count:
 		frappe.throw(
 			_("You have {0} active users. Please deactivate users before reducing your seat count.").format(
@@ -618,7 +612,7 @@ def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any
 
 	active_user_count = 0
 	if site:
-		active_user_count = get_active_user_count(site)
+		active_user_count = get_site_user_active_count(site)
 		if new_seats < active_user_count:
 			frappe.throw(
 				_("You have {0} active users. Please deactivate users before reducing your seat count.").format(

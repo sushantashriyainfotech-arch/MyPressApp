@@ -7,11 +7,11 @@ import frappe
 from press.api.site import get_site_plans as get_press_site_plans
 from press.api.site import change_plan as change_press_plan
 
-from erpnext_saas_model.seat_billing import get_active_user_count
 from erpnext_saas_model.seat_billing import get_seat_billing_dashboard
 from erpnext_saas_model.seat_billing import get_site_seat_limit_context
 from erpnext_saas_model.seat_billing import get_subscription_seat_context
 from erpnext_saas_model.seat_billing import is_seat_based_plan
+from erpnext_saas_model.seat_billing import get_site_user_active_count
 from erpnext_saas_model.seat_billing import validate_site_user_seat_limit
 from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
@@ -106,7 +106,7 @@ def get_current_subscription_context(site=None, subscription=None):
 	current["site"] = getattr(subscription_doc, "site", None) or (
 		subscription_doc.document_name if subscription_doc.document_type == "Site" else None
 	)
-	current["active_user_count"] = get_active_user_count(current["site"]) if current["site"] else 0
+	current["active_user_count"] = get_site_user_active_count(current["site"]) if current["site"] else 0
 	return {"subscription": subscription_doc.name, "current": current}
 
 
