@@ -15,9 +15,15 @@ def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None 
 	}
 	message = json.dumps(entry, default=str, sort_keys=True)
 	logger = frappe.logger("erpnext_saas_model.user_eligibility")
+	logger.setLevel("INFO")
+
+	title = f"{status.upper()}: {event_type}" if status and status != "info" else f"User Eligibility: {event_type}"
+
 	if status == "warning":
 		logger.warning(message)
+		frappe.log_error(title=title, message=message)
 	elif status == "error":
 		logger.error(message)
+		frappe.log_error(title=title, message=message)
 	else:
 		logger.info(message)
