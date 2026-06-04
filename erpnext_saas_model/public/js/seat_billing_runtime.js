@@ -632,10 +632,17 @@
 		);
 	}
 
-	function maybeMount() {
+	async function maybeMount() {
 		// Mounting is idempotent: if the page is relevant and a plan grid exists,
 		// attach to it and sync the current selection.
 		if (!isRelevantRoute()) return;
+
+		try {
+			await Promise.all([loadPlans(), loadLocale()]);
+		} catch (error) {
+			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
+			return;
+		}
 
 		if (isManagedSiteOverviewRoute() && !state.activeSubscriptionContext) {
 			loadCurrentSubscription();
@@ -1066,13 +1073,8 @@
 		// 3) mount into the current page state (trigging lazy patching if route is relevant)
 		observe();
 
-		try {
-			await Promise.all([loadPlans(), loadLocale()]);
-		} catch (error) {
-			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
-			return;
-		}
-		maybeMount();
+
+		await maybeMount();
 	}
 
 	if (document.readyState === 'loading') {
