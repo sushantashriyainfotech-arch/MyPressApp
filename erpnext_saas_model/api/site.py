@@ -114,6 +114,12 @@ def get_current_subscription_context(site=None, subscription=None):
 def check_user_creation_eligibility():
 	"""Return True if the authenticated site may add another user."""
 	site = _authenticate_billing_site()
+
+	_log_user_eligibility(
+		"user_creation_eligibility",
+		{"site": site.name},
+		{"can_create_user": "Not yet"},
+	)
 	try:
 		validate_site_user_seat_limit(site, enabled=True)
 		_log_user_eligibility(
