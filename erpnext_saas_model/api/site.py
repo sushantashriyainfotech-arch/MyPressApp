@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import frappe
-from frappe.utils import now_datetime
 
 from press.api.site import get_site_plans as get_press_site_plans
 from press.api.site import change_plan as change_press_plan
@@ -14,23 +13,7 @@ from erpnext_saas_model.seat_billing import get_site_seat_limit_context
 from erpnext_saas_model.seat_billing import get_subscription_seat_context
 from erpnext_saas_model.seat_billing import is_seat_based_plan
 from erpnext_saas_model.seat_billing import validate_site_user_seat_limit
-
-
-def _log_user_eligibility(event_type: str, payload: dict, decision: dict | None = None, status: str = "info"):
-	entry = {
-		"event_type": event_type,
-		"payload": payload,
-		"decision": decision,
-		"timestamp": now_datetime(),
-	}
-	message = json.dumps(entry, default=str, sort_keys=True)
-	logger = frappe.logger("erpnext_saas_model.user_eligibility")
-	if status == "warning":
-		logger.warning(message)
-	elif status == "error":
-		logger.error(message)
-	else:
-		logger.info(message)
+from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
 
 def _authenticate_billing_site() -> frappe._dict:

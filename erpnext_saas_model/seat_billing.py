@@ -6,8 +6,9 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime, nowtime
-from erpnext_saas_model.api.site import _log_user_eligibility
 from matplotlib.style import context
+
+from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
 SEAT_BILLING_SNAPSHOT_HOUR = 18
 ACTIVE_USER_CACHE_TTL = 60 * 5
