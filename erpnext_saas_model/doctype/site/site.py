@@ -8,7 +8,11 @@ from frappe.utils import cint
 from press.api.client import dashboard_whitelist
 from press.press.doctype.site.site import Site as PressSite
 
-from erpnext_saas_model.seat_billing import is_seat_based_plan, validate_seat_selection_for_plan
+from erpnext_saas_model.seat_billing import (
+	is_seat_based_plan,
+	sync_site_users_from_analytics,
+	validate_seat_selection_for_plan,
+)
 
 
 class Site(PressSite):
@@ -136,6 +140,19 @@ class Site(PressSite):
 		if getattr(subscription, "site", None) and getattr(subscription, "site", None) != self.name:
 			frappe.throw("The linked subscription does not belong to this site.")
 		return subscription.update_billable_seats(requested_seats)
+
+	def sync_users_to_product_site(self, analytics=None):
+		"""
+		Sync enabled users from the product site while honoring billable-seat limits.
+		"""
+		if self.is_standby:
+			return
+
+		if not analytics:
+			analytics = self.fetch_analytics()
+
+		if analytics:
+			sync_site_users_from_analytics(self.name, analytics)
 
 	@dashboard_whitelist()
 	def set_plan(

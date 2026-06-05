@@ -12,6 +12,7 @@ from erpnext_saas_model.seat_billing import get_seat_billing_dashboard
 from erpnext_saas_model.seat_billing import get_site_seat_limit_context
 from erpnext_saas_model.seat_billing import get_subscription_seat_context
 from erpnext_saas_model.seat_billing import is_seat_based_plan
+from erpnext_saas_model.seat_billing import upsert_site_user
 from erpnext_saas_model.seat_billing import get_site_user_active_count
 from erpnext_saas_model.seat_billing import validate_site_user_seat_limit
 from erpnext_saas_model.user_eligibility import _log_user_eligibility
@@ -138,3 +139,46 @@ def check_user_creation_eligibility():
 			status="warning",
 		)
 		frappe.throw(str(exc))
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def sync_site_user(user=None, enabled=None, operation=None):
+	"""Sync a tenant User change into the billing-side Site User mirror."""
+	site = _authenticate_billing_site()
+	if not user:
+		frappe.throw("Missing user")
+
+	enabled_bool = bool(int(enabled)) if enabled is not None else True
+	if operation == "delete":
+		enabled_bool = False
+
+	_log_user_eligibility(
+		"site_user_sync.start",
+		{
+			"site": site.name,
+			"user": user,
+			"enabled": enabled_bool,
+			"operation": operation,
+		},
+		status="info",
+	)
+
+	site_user = upsert_site_user(site.name, user, enabled_bool)
+	_log_user_eligibility(
+		"site_user_sync.mirror_updated",
+		{
+			"site": site.name,
+			"user": user,
+			"enabled": enabled_bool,
+			"operation": operation,
+			"site_user": getattr(site_user, "name", None),
+		},
+		status="info",
+	)
+	_log_user_eligibility(
+		"site_user_sync",
+		{"site": site.name, "user": user, "enabled": enabled_bool, "operation": operation},
+		{"synced": True, "site_user": getattr(site_user, "name", None)},
+		status="info",
+	)
+	return True

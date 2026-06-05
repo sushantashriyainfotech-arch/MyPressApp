@@ -78,3 +78,23 @@ class TestSiteApi(FrappeTestCase):
 				api_site.check_user_creation_eligibility()
 
 		self.assertIn("No active subscription found.", str(excinfo.exception))
+
+	def test_sync_site_user_upserts_mirror_row(self):
+		site = SimpleNamespace(name="SITE-001")
+		with patch.object(api_site, "_authenticate_billing_site", return_value=site), patch.object(
+			api_site, "upsert_site_user", return_value=SimpleNamespace(name="SU-001")
+		) as upsert:
+			result = api_site.sync_site_user(user="user@example.com", enabled=1, operation="upsert")
+
+		upsert.assert_called_once_with("SITE-001", "user@example.com", True)
+		self.assertTrue(result)
+
+	def test_sync_site_user_disables_on_delete(self):
+		site = SimpleNamespace(name="SITE-001")
+		with patch.object(api_site, "_authenticate_billing_site", return_value=site), patch.object(
+			api_site, "upsert_site_user", return_value=SimpleNamespace(name="SU-001")
+		) as upsert:
+			result = api_site.sync_site_user(user="user@example.com", enabled=1, operation="delete")
+
+		upsert.assert_called_once_with("SITE-001", "user@example.com", False)
+		self.assertTrue(result)

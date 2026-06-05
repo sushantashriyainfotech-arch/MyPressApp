@@ -10,6 +10,7 @@ from frappe.utils import cint, flt, getdate, now_datetime, nowtime
 from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
 SEAT_BILLING_SNAPSHOT_HOUR = 18
+ACTIVE_USER_CACHE_TTL = 60 * 5
 
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
 	"""
@@ -227,7 +228,49 @@ def get_site_user_active_count(site_name: str) -> int:
 	if not site_name:
 		return 0
 
-	return frappe.db.count("Site User", {"site": site_name, "enabled": 1})
+	cache_key = f"erpnext_saas_model:seat_billing:active_users:{site_name}"
+	cached_value = frappe.cache().get_value(cache_key)
+	if cached_value is not None:
+		return cint(cached_value)
+
+	active_users = frappe.db.count("Site User", {"site": site_name, "enabled": 1})
+	frappe.cache().set_value(cache_key, active_users, expires_in_sec=ACTIVE_USER_CACHE_TTL)
+	return active_users
+
+
+def refresh_site_user_active_count_cache(site_name: str) -> int:
+	"""Recompute and cache the enabled Site User count for a site."""
+	if not site_name:
+		return 0
+
+	active_users = frappe.db.count("Site User", {"site": site_name, "enabled": 1})
+	cache_key = f"erpnext_saas_model:seat_billing:active_users:{site_name}"
+	frappe.cache().set_value(cache_key, active_users, expires_in_sec=ACTIVE_USER_CACHE_TTL)
+	return active_users
+
+
+def _extract_users_from_analytics(analytics_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+	"""Internal helper to parse user lists from Site Analytics data."""
+	if not analytics_payload:
+		return []
+
+	analytics = analytics_payload.get("analytics")
+	if isinstance(analytics, dict):
+		users = analytics.get("users", [])
+		return users if isinstance(users, list) else []
+
+	users = analytics_payload.get("users", [])
+	return users if isinstance(users, list) else []
+
+
+def _get_site_analytics(site_name: str) -> dict[str, Any]:
+	"""Fetches real-time site analytics (including user state) from the Press Agent."""
+	site = frappe.get_cached_doc("Site", site_name)
+	analytics = site.fetch_analytics()
+	if not analytics:
+		frappe.throw(_("Could not verify active user count. Please try again."))
+
+	return analytics
 
 
 def get_site_billable_seats(site: str | dict[str, Any] | None) -> int:
@@ -285,7 +328,7 @@ def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, 
 		plan = frappe.get_cached_doc("Site Plan", plan_name)
 
 	billable_seats = get_site_billable_seats(site_doc)
-	active_user_count = frappe.db.count("Site User", {"site": site_doc.name, "enabled": 1})
+	active_user_count = get_site_user_active_count(site_doc.name)
 	next_plan = getattr(plan, "next_plan", None) if plan else None
 
 	return {
@@ -296,6 +339,51 @@ def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, 
 		"plan_title": getattr(plan, "plan_title", None) if plan else None,
 		"next_plan": next_plan,
 	}
+
+
+def sync_site_users_from_analytics(site: str, analytics_payload: dict[str, Any]) -> None:
+	"""
+	Syncs users from site analytics to Press while enforcing seat caps.
+	"""
+	_log_user_eligibility(
+		"sync_site_users_from_analytics.start",
+		{
+			"site": site,
+			"analytics_keys": sorted(list(analytics_payload.keys())) if isinstance(analytics_payload, dict) else None,
+		},
+		status="info",
+	)
+	users = _extract_users_from_analytics(analytics_payload)
+	_log_user_eligibility(
+		"sync_site_users_from_analytics.users_parsed",
+		{
+			"site": site,
+			"users_count": len(users),
+			"sample_users": [user.get("email") for user in users[:5]],
+		},
+		status="info",
+	)
+	for user_data in users:
+		_log_user_eligibility(
+			"sync_site_users_from_analytics.user_upsert",
+			{
+				"site": site,
+				"user": user_data.get("email"),
+				"enabled": user_data.get("enabled"),
+			},
+			status="info",
+		)
+		upsert_site_user(site, user_data.get("email"), user_data.get("enabled"), refresh_cache=False)
+	active_users = refresh_site_user_active_count_cache(site)
+	_log_user_eligibility(
+		"sync_site_users_from_analytics.complete",
+		{
+			"site": site,
+			"synced_users_count": len(users),
+			"active_user_count": active_users,
+		},
+		status="info",
+	)
 
 
 def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = True) -> dict[str, Any]:
@@ -378,7 +466,79 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 	return context
 
 
-def upsert_site_user(site: str, user_mail: str, enabled: bool) -> dict[str, Any] | None:
+def sync_site_access(subscription: str | dict[str, Any]):
+	"""
+	Notifies the managed Site about its new seat/license limit.
+	Triggers an external API call to the site via the Press Agent.
+	"""
+	_log_user_eligibility(
+		"sync_site_access.start",
+		{
+			"subscription": subscription if isinstance(subscription, str) else subscription.get("name"),
+		},
+		status="info",
+	)
+	if isinstance(subscription, str):
+		subscription_doc = frappe.get_cached_doc("Subscription", subscription)
+	else:
+		subscription_doc = frappe.get_cached_doc("Subscription", subscription.get("name"))
+
+	if not subscription_doc.site:
+		_log_user_eligibility(
+			"sync_site_access.skipped",
+			{
+				"subscription": subscription_doc.name,
+				"reason": "NO_SITE_LINKED",
+			},
+			status="warning",
+		)
+		return
+
+	try:
+		site = frappe.get_cached_doc("Site", subscription_doc.site)
+		_log_user_eligibility(
+			"sync_site_access.site_loaded",
+			{
+				"subscription": subscription_doc.name,
+				"site": site.name,
+				"plan": getattr(site, "plan", None) or getattr(site, "subscription_plan", None),
+				"billable_seats": getattr(site, "billable_seats", None),
+			},
+			status="info",
+		)
+		if hasattr(site, "sync_users_to_product_site"):
+			_log_user_eligibility(
+				"sync_site_access.sync_users_called",
+				{
+					"subscription": subscription_doc.name,
+					"site": site.name,
+				},
+				status="info",
+			)
+			site.sync_users_to_product_site()
+			_log_user_eligibility(
+				"sync_site_access.complete",
+				{
+					"subscription": subscription_doc.name,
+					"site": site.name,
+				},
+				status="info",
+			)
+	except Exception:
+		frappe.logger("erpnext_saas_model.seat_billing").warning(
+			f"Failed to sync site access for subscription {subscription_doc.name}", exc_info=True
+		)
+		_log_user_eligibility(
+			"sync_site_access.failed",
+			{
+				"subscription": subscription_doc.name,
+				"site": getattr(subscription_doc, "site", None),
+			},
+			status="warning",
+		)
+
+
+def upsert_site_user(site: str, user_mail: str, enabled: bool, refresh_cache: bool = True) -> dict[str, Any] | None:
 	"""
 	Creates or updates a Site User row while honoring seat limits.
 	Returns the inserted/updated document, or None when no change is needed.
@@ -388,17 +548,67 @@ def upsert_site_user(site: str, user_mail: str, enabled: bool) -> dict[str, Any]
 
 	site_doc = frappe.get_cached_doc("Site", site)
 	enabled = bool(cint(enabled))
+	_log_user_eligibility(
+		"upsert_site_user.start",
+		{
+			"site": site_doc.name,
+			"user": user_mail,
+			"enabled": enabled,
+			"refresh_cache": refresh_cache,
+		},
+		status="info",
+	)
 	site_user_name = frappe.db.get_value("Site User", {"site": site_doc.name, "user": user_mail}, "name")
 
 	if site_user_name:
+		_log_user_eligibility(
+			"upsert_site_user.existing",
+			{
+				"site": site_doc.name,
+				"user": user_mail,
+				"site_user_name": site_user_name,
+			},
+			status="info",
+		)
 		current_enabled = cint(frappe.db.get_value("Site User", site_user_name, "enabled") or 0)
 		if current_enabled == cint(enabled):
+			_log_user_eligibility(
+				"upsert_site_user.no_change",
+				{
+					"site": site_doc.name,
+					"user": user_mail,
+					"site_user_name": site_user_name,
+					"enabled": enabled,
+				},
+				status="info",
+			)
 			return frappe.get_doc("Site User", site_user_name)
 
 		if enabled:
 			validate_site_user_seat_limit(site_doc, enabled=True)
 
 		frappe.db.set_value("Site User", site_user_name, "enabled", enabled)
+		_log_user_eligibility(
+			"upsert_site_user.updated",
+			{
+				"site": site_doc.name,
+				"user": user_mail,
+				"site_user_name": site_user_name,
+				"enabled": enabled,
+			},
+			status="info",
+		)
+		if refresh_cache:
+			active_users = refresh_site_user_active_count_cache(site_doc.name)
+			_log_user_eligibility(
+				"upsert_site_user.cache_refreshed",
+				{
+					"site": site_doc.name,
+					"user": user_mail,
+					"active_user_count": active_users,
+				},
+				status="info",
+			)
 		return frappe.get_doc("Site User", site_user_name)
 
 	if enabled:
@@ -413,6 +623,27 @@ def upsert_site_user(site: str, user_mail: str, enabled: bool) -> dict[str, Any]
 		}
 	)
 	site_user.insert(ignore_permissions=True)
+	if refresh_cache:
+		active_users = refresh_site_user_active_count_cache(site_doc.name)
+		_log_user_eligibility(
+			"upsert_site_user.cache_refreshed",
+			{
+				"site": site_doc.name,
+				"user": user_mail,
+				"active_user_count": active_users,
+			},
+			status="info",
+		)
+	_log_user_eligibility(
+		"upsert_site_user.created",
+		{
+			"site": site_doc.name,
+			"user": user_mail,
+			"site_user_name": site_user.name,
+			"enabled": enabled,
+		},
+		status="info",
+	)
 	return site_user
 
 
@@ -420,8 +651,27 @@ def validate_site_user_before_save(doc, method=None):
 	"""
 	Doc event hook for Site User writes that bypass the custom sync helpers.
 	"""
+	_log_user_eligibility(
+		"validate_site_user_before_save.start",
+		{
+			"site": getattr(doc, "site", None),
+			"user": getattr(doc, "user", None),
+			"enabled": getattr(doc, "enabled", None),
+		},
+		status="info",
+	)
 	previous = doc.get_doc_before_save() if hasattr(doc, "get_doc_before_save") else None
 	if previous and cint(getattr(previous, "enabled", 0)) == cint(getattr(doc, "enabled", 0)):
+		_log_user_eligibility(
+			"validate_site_user_before_save.skipped",
+			{
+				"site": getattr(doc, "site", None),
+				"user": getattr(doc, "user", None),
+				"enabled": getattr(doc, "enabled", None),
+				"reason": "NO_ENABLED_STATE_CHANGE",
+			},
+			status="info",
+		)
 		return
 
 	validate_site_user_seat_limit(getattr(doc, "site", None), enabled=bool(cint(getattr(doc, "enabled", 0))))
