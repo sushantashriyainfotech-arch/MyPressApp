@@ -206,20 +206,6 @@ def get_billing_effective_from(moment: datetime | None = None):
 	return getdate(moment.date()) + timedelta(days=1)
 
 
-def _extract_users_from_analytics(analytics_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
-	"""Internal helper to parse user lists from Site Analytics data."""
-	if not analytics_payload:
-		return []
-
-	analytics = analytics_payload.get("analytics")
-	if isinstance(analytics, dict):
-		users = analytics.get("users", [])
-		return users if isinstance(users, list) else []
-
-	users = analytics_payload.get("users", [])
-	return users if isinstance(users, list) else []
-
-
 def _get_subscription_site_name(subscription_doc: dict[str, Any]) -> str | None:
 	"""
 	Resolve the site name associated with a subscription.
@@ -236,27 +222,12 @@ def _get_subscription_site_name(subscription_doc: dict[str, Any]) -> str | None:
 	return None
 
 
-def _get_site_analytics(site_name: str) -> dict[str, Any]:
-	"""Fetches real-time site analytics (including user state) from the Press Agent."""
-	site = frappe.get_cached_doc("Site", site_name)
-	analytics = site.fetch_analytics()
-	if not analytics:
-		frappe.throw(_("Could not verify active user count. Please try again."))
-
-	return analytics
-
-
 def get_site_user_active_count(site_name: str) -> int:
 	"""Count enabled mirrored users for a site."""
 	if not site_name:
 		return 0
 
 	return frappe.db.count("Site User", {"site": site_name, "enabled": 1})
-
-
-def get_active_user_count(site_name: str) -> int:
-	"""Backwards-compatible alias for the site-user active count."""
-	return get_site_user_active_count(site_name)
 
 
 def get_site_billable_seats(site: str | dict[str, Any] | None) -> int:
@@ -545,15 +516,6 @@ def validate_team_member_seat_limit(team: str | dict[str, Any]) -> dict[str, Any
 	return context
 
 
-def sync_site_users_from_analytics(site: str, analytics_payload: dict[str, Any]) -> None:
-	"""
-	Syncs users from site analytics to Press while enforcing seat caps.
-	"""
-	users = _extract_users_from_analytics(analytics_payload)
-	for user_data in users:
-		upsert_site_user(site, user_data.get("email"), user_data.get("enabled"))
-
-
 def get_subscription_seat_context(subscription: str | dict[str, Any]) -> dict[str, Any]:
 	"""
 	Compiles a context object representing the current seat-billing state 
@@ -714,29 +676,6 @@ def log_seat_change(
 	return seat_change
 
 
-def sync_site_access(subscription: str | dict[str, Any]):
-	"""
-	Notifies the managed Site about its new seat/license limit.
-	Triggers an external API call to the site via the Press Agent.
-	"""
-	if isinstance(subscription, str):
-		subscription_doc = frappe.get_cached_doc("Subscription", subscription)
-	else:
-		subscription_doc = frappe.get_cached_doc("Subscription", subscription.get("name"))
-
-	if not subscription_doc.site:
-		return
-
-	try:
-		site = frappe.get_cached_doc("Site", subscription_doc.site)
-		if hasattr(site, "sync_users_to_product_site"):
-			site.sync_users_to_product_site()
-	except Exception:
-		frappe.logger("erpnext_saas_model.seat_billing").warning(
-			f"Failed to sync site access for subscription {subscription_doc.name}", exc_info=True
-		)
-
-
 def create_seat_usage_record(subscription: str | dict[str, Any], date=None, force: bool = False):
 	"""
 	Creates a daily Usage Record representing the seat count snapshot for billing.
@@ -873,7 +812,6 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 			billing_effective_from=get_billing_effective_from(subscription_doc.seats_last_updated),
 		)
 
-	sync_site_access(subscription_doc)
 	return {
 		"subscription": subscription_doc.name,
 		"plan": plan_doc.name,

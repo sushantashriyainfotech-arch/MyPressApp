@@ -15,7 +15,6 @@ from erpnext_saas_model.seat_billing import (
 	is_seat_based_plan,
 	get_site_user_active_count,
 	log_seat_change,
-	sync_site_access,
 	validate_seat_change,
 )
 
@@ -162,9 +161,6 @@ class Subscription(PressSubscription):
 			access_updated_at=now_datetime(),
 			billing_effective_from=get_billing_effective_from(),
 		)
-		
-		# Inform the managed site about the new seat count
-		sync_site_access(self)
 
 	@frappe.whitelist()
 	def create_usage_record(self, date=None):
@@ -222,7 +218,6 @@ class Subscription(PressSubscription):
 			access_updated_at=self.seats_last_updated,
 			billing_effective_from=get_billing_effective_from(self.seats_last_updated),
 		)
-		sync_site_access(self)
 		
 		return {
 			"subscription": self.name,
