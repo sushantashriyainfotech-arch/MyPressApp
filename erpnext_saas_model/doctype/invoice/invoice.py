@@ -17,6 +17,8 @@ class Invoice(PressInvoice):
 		return is_seat_based_plan(plan)
 
 	def _get_seat_usage_description(self, usage_record) -> str:
+		if getattr(usage_record, "seat_change_log", None):
+			return get_seat_usage_record_remark(seat_change_log=usage_record.seat_change_log)
 		if getattr(usage_record, "remark", None):
 			return usage_record.remark
 
@@ -67,6 +69,7 @@ class Invoice(PressInvoice):
 					"plan": usage_record.plan,
 					"description": self._get_seat_usage_description(usage_record),
 					"usage_record": usage_record.name,
+					"seat_change_log": getattr(usage_record, "seat_change_log", None),
 					"quantity": 0,
 					"rate": daily_rate,
 					"site": usage_record.site,
@@ -75,6 +78,8 @@ class Invoice(PressInvoice):
 		else:
 			if not getattr(invoice_item, "usage_record", None):
 				invoice_item.usage_record = usage_record.name
+			if not getattr(invoice_item, "seat_change_log", None):
+				invoice_item.seat_change_log = getattr(usage_record, "seat_change_log", None)
 			invoice_item.rate = daily_rate
 			if not getattr(invoice_item, "description", None):
 				invoice_item.description = self._get_seat_usage_description(usage_record)
@@ -105,6 +110,7 @@ class Invoice(PressInvoice):
 				row.document_type == usage_record.document_type
 				and row.document_name == usage_record.document_name
 				and row.plan == usage_record.plan
+				and getattr(row, "seat_change_log", None) == getattr(usage_record, "seat_change_log", None)
 				and flt(row.rate or 0, 2) == daily_rate
 			)
 			if row.document_type == "Marketplace App":
@@ -121,6 +127,7 @@ class Invoice(PressInvoice):
 					"document_type": usage_record.document_type,
 					"document_name": usage_record.document_name,
 					"plan": usage_record.plan,
+					"seat_change_log": getattr(usage_record, "seat_change_log", None),
 				},
 			)
 			if not remaining:
@@ -136,6 +143,7 @@ class Invoice(PressInvoice):
 					row.document_type == usage_record.document_type
 					and row.document_name == usage_record.document_name
 					and row.plan == usage_record.plan
+					and getattr(row, "seat_change_log", None) == getattr(usage_record, "seat_change_log", None)
 					and flt(row.rate or 0, 2) == daily_rate
 				)
 				if row.document_type == "Marketplace App":

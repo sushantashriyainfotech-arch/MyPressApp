@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 from frappe.utils import flt, getdate
 
-from erpnext_saas_model.seat_billing import get_seat_usage_record_remark
+from erpnext_saas_model.seat_billing import get_seat_change_log_for_reference, get_seat_usage_record_remark
 
 LEGACY_SEAT_DESCRIPTION_PREFIXES = ("Seats changed", "Billable seats change record")
 
 
 def execute():
+	ensure_seat_change_log_fields()
 	seat_plan_names = frappe.get_all(
 		"Site Plan",
 		filters={"billing_type": "Seat Based"},
@@ -21,6 +23,44 @@ def execute():
 	backfill_invoice_item_descriptions(seat_plan_names)
 
 
+def ensure_seat_change_log_fields():
+	ensure_custom_field(
+		"Usage Record",
+		"seat_change_log",
+		{
+			"label": "Seat Change Log",
+			"fieldname": "seat_change_log",
+			"fieldtype": "Link",
+			"options": "Seat Change Log",
+			"hidden": 1,
+			"read_only": 1,
+			"no_copy": 1,
+			"insert_after": "snapshot_taken_at",
+		},
+	)
+	ensure_custom_field(
+		"Invoice Item",
+		"seat_change_log",
+		{
+			"label": "Seat Change Log",
+			"fieldname": "seat_change_log",
+			"fieldtype": "Link",
+			"options": "Seat Change Log",
+			"hidden": 1,
+			"read_only": 1,
+			"no_copy": 1,
+			"insert_after": "usage_record",
+		},
+	)
+
+
+def ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
+	custom_field_name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname})
+	if custom_field_name:
+		return
+	create_custom_field(doctype, df, ignore_validate=True)
+
+
 def backfill_usage_record_remarks(seat_plan_names):
 	usage_records = frappe.get_all(
 		"Usage Record",
@@ -29,16 +69,28 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=["name", "remark", "billable_seats", "subscription", "date", "snapshot_taken_at"],
+		fields=["name", "remark", "billable_seats", "subscription", "date", "snapshot_taken_at", "seat_change_log"],
 		order_by="creation asc",
 	)
 
 	for usage_record in usage_records:
+		seat_change_log = usage_record.seat_change_log or get_seat_change_log_for_reference(
+			usage_record.subscription, usage_record.date
+		)
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
 			reference_at=usage_record.date,
+			seat_change_log=seat_change_log,
 			fallback_billable_seats=usage_record.billable_seats,
 		)
+		if getattr(usage_record, "seat_change_log", None) != getattr(seat_change_log, "name", None):
+			frappe.db.set_value(
+				"Usage Record",
+				usage_record.name,
+				"seat_change_log",
+				getattr(seat_change_log, "name", None),
+				update_modified=False,
+			)
 		if usage_record.remark == remark:
 			continue
 
@@ -64,6 +116,7 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 			"rate",
 			"description",
 			"usage_record",
+			"seat_change_log",
 		],
 		order_by="creation asc",
 	)
@@ -80,6 +133,8 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
 			reference_at=usage_record.date,
+			seat_change_log=usage_record.seat_change_log
+			or get_seat_change_log_for_reference(usage_record.subscription, usage_record.date),
 			fallback_billable_seats=usage_record.billable_seats,
 		)
 		frappe.db.set_value(
@@ -89,6 +144,14 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 			usage_record.name,
 			update_modified=False,
 		)
+		if getattr(usage_record, "seat_change_log", None):
+			frappe.db.set_value(
+				"Invoice Item",
+				invoice_item.name,
+				"seat_change_log",
+				usage_record.seat_change_log,
+				update_modified=False,
+			)
 		frappe.db.set_value(
 			"Invoice Item",
 			invoice_item.name,
@@ -125,6 +188,7 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 			"billable_seats",
 			"seat_amount",
 			"amount",
+			"seat_change_log",
 		],
 		order_by="creation asc",
 	)
@@ -132,6 +196,8 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 	rate = flt(invoice_item.rate or 0, 2)
 	for usage_record in usage_records:
 		if usage_record.name in used_usage_records:
+			continue
+		if getattr(invoice_item, "seat_change_log", None) and usage_record.seat_change_log != invoice_item.seat_change_log:
 			continue
 		if flt(_get_usage_record_daily_rate(usage_record), 2) != rate:
 			continue

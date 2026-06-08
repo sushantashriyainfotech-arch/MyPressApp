@@ -96,6 +96,26 @@ def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, A
 	)
 
 
+def get_seat_change_log_for_reference(subscription: str, reference_at=None) -> dict[str, Any] | None:
+	"""Return the latest seat change log that applies at a specific point in time."""
+	if not reference_at:
+		reference_at = now_datetime()
+	if not isinstance(reference_at, datetime):
+		reference_at = datetime.combine(getdate(reference_at), time(23, 59, 59))
+
+	logs = frappe.get_all(
+		"Seat Change Log",
+		filters={
+			"subscription": subscription,
+			"access_updated_at": ("<=", reference_at),
+		},
+		fields=["name", "old_seats", "new_seats", "change_type", "access_updated_at"],
+		order_by="access_updated_at desc, creation desc",
+		limit=1,
+	)
+	return logs[0] if logs else None
+
+
 def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any]:
 	"""
 	Collects all data required for the Seat Billing Dashboard view.
@@ -1040,6 +1060,7 @@ def get_seat_usage_record_remark(
 	subscription: str | dict[str, Any] | None = None,
 	reference_at=None,
 	snapshot_taken_at=None,
+	seat_change_log: str | dict[str, Any] | None = None,
 	fallback_billable_seats: int | None = None,
 ) -> str:
 	"""Build the human-readable reason shown alongside seat-based usage records."""
@@ -1055,23 +1076,14 @@ def get_seat_usage_record_remark(
 		)
 
 	change_log = None
-	if subscription_doc:
-		if reference_at is None:
-			reference_at = now_datetime()
-		if not isinstance(reference_at, datetime):
-			reference_at = datetime.combine(getdate(reference_at), time(23, 59, 59))
-		change_log = frappe.get_all(
-			"Seat Change Log",
-			filters={
-				"subscription": subscription_doc.name,
-				"access_updated_at": ("<=", reference_at),
-			},
-			fields=["old_seats", "new_seats", "change_type"],
-			order_by="access_updated_at desc, creation desc",
-			limit=1,
+	if seat_change_log:
+		change_log = (
+			seat_change_log
+			if isinstance(seat_change_log, dict)
+			else frappe.get_cached_doc("Seat Change Log", seat_change_log).as_dict()
 		)
-		if change_log:
-			change_log = change_log[0]
+	elif subscription_doc:
+		change_log = get_seat_change_log_for_reference(subscription_doc.name, reference_at=reference_at)
 
 	if change_log:
 		return _format_seat_change_log_description(change_log, fallback_billable_seats=fallback_billable_seats)
@@ -1143,9 +1155,11 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	billable_seats = cint(subscription.billable_seats or 0)
 	seat_amount = flt(price_per_seat * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
+	seat_change_log = get_seat_change_log_for_reference(subscription.name, reference_at=date if backfill else snapshot_taken_at)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
 		reference_at=snapshot_taken_at if not backfill else date,
+		seat_change_log=seat_change_log,
 		fallback_billable_seats=billable_seats,
 	)
 
@@ -1166,6 +1180,7 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 			"billable_seats": billable_seats,
 			"seat_amount": seat_amount,
 			"snapshot_taken_at": snapshot_taken_at,
+			"seat_change_log": getattr(seat_change_log, "name", None) if seat_change_log else None,
 			"remark": remark,
 		}
 	)
