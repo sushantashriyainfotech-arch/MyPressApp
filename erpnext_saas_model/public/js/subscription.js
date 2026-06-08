@@ -50,13 +50,13 @@
 			if (frm.doc.plan_type !== "Site Plan") return;
 
 			// Add button to open the external Seat Billing Management dashboard
-			frm.add_custom_button(__("Open Seat Billing"), () => {
-				window.open(
-					`/seat-billing?subscription=${encodeURIComponent(frm.doc.name)}`,
-					"_blank",
-					"noopener"
-				);
-			});
+			// frm.add_custom_button(__("Open Seat Billing"), () => {
+			// 	window.open(
+			// 		`/seat-billing?subscription=${encodeURIComponent(frm.doc.name)}`,
+			// 		"_blank",
+			// 		"noopener"
+			// 	);
+			// });
 
 			// Add a simple summary helper for the currently viewed commitment
 			frm.add_custom_button(__("Seat Summary"), () => {

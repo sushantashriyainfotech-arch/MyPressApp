@@ -7,3 +7,4 @@
 erpnext_saas_model.patches.v0_0_1.install_seat_billing_fields
 erpnext_saas_model.patches.v0_0_1.fix_day_plan_billing_type
 erpnext_saas_model.patches.v0_0_1.repair_seat_change_log_doctype
+erpnext_saas_model.patches.v0_0_2.backfill_seat_usage_record_descriptions

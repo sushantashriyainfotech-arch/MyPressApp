@@ -5,7 +5,7 @@ from frappe.utils import cint, flt, fmt_money
 
 from press.press.doctype.invoice.invoice import Invoice as PressInvoice
 
-from erpnext_saas_model.seat_billing import is_seat_based_plan
+from erpnext_saas_model.seat_billing import get_seat_usage_record_remark, is_seat_based_plan
 
 
 class Invoice(PressInvoice):
@@ -15,6 +15,13 @@ class Invoice(PressInvoice):
 
 		plan = frappe.get_cached_doc(usage_record.plan_type, usage_record.plan)
 		return is_seat_based_plan(plan)
+
+	def _get_seat_usage_description(self, usage_record) -> str:
+		description = getattr(usage_record, "remark", None)
+		if description:
+			return description
+
+		return get_seat_usage_record_remark(billable_seats=getattr(usage_record, "billable_seats", None))
 
 	def _get_seat_usage_pricing(self, usage_record) -> tuple[int, float]:
 		"""
@@ -55,6 +62,7 @@ class Invoice(PressInvoice):
 					"document_type": usage_record.document_type,
 					"document_name": usage_record.document_name,
 					"plan": usage_record.plan,
+					"description": self._get_seat_usage_description(usage_record),
 					"quantity": 0,
 					"rate": daily_rate,
 					"site": usage_record.site,
@@ -62,6 +70,8 @@ class Invoice(PressInvoice):
 			)
 		else:
 			invoice_item.rate = daily_rate
+			if not getattr(invoice_item, "description", None):
+				invoice_item.description = self._get_seat_usage_description(usage_record)
 		invoice_item.quantity = flt((invoice_item.quantity or 0) + 1, 2)
 		invoice_item.amount = flt((invoice_item.quantity or 0) * daily_rate, 2)
 		if billable_seats:

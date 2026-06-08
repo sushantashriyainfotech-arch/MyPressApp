@@ -1021,6 +1021,17 @@ def create_seat_usage_records(date=None):
 			)
 
 
+def get_seat_usage_record_remark(backfill: bool = False, billable_seats: int | None = None) -> str:
+	"""Build the human-readable reason shown alongside seat-based usage records."""
+	reason = "Seat billing backfill snapshot" if backfill else "Seat billing snapshot"
+	if billable_seats is None:
+		return reason
+
+	seat_count = cint(billable_seats or 0)
+	seat_label = "seat" if seat_count == 1 else "seats"
+	return f"{reason} for {seat_count} billable {seat_label}"
+
+
 @frappe.whitelist()
 def change_subscription_seats(subscription: str, new_seats: int) -> dict[str, Any]:
 	"""API wrapper to trigger a seat count update on a subscription."""
@@ -1082,6 +1093,7 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	billable_seats = cint(subscription.billable_seats or 0)
 	seat_amount = flt(price_per_seat * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
+	remark = get_seat_usage_record_remark(backfill=backfill, billable_seats=billable_seats)
 
 	usage_record = frappe.get_doc(
 		{
@@ -1100,7 +1112,7 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 			"billable_seats": billable_seats,
 			"seat_amount": seat_amount,
 			"snapshot_taken_at": snapshot_taken_at,
-			"remark": "Seat billing snapshot" if not backfill else "Seat billing backfill snapshot",
+			"remark": remark,
 		}
 	)
 	usage_record.insert(ignore_permissions=True)
