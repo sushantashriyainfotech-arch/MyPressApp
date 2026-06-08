@@ -17,11 +17,11 @@ class Invoice(PressInvoice):
 		return is_seat_based_plan(plan)
 
 	def _get_seat_usage_description(self, usage_record) -> str:
-		description = getattr(usage_record, "remark", None)
-		if description:
-			return description
-
-		return get_seat_usage_record_remark(billable_seats=getattr(usage_record, "billable_seats", None))
+		return get_seat_usage_record_remark(
+			subscription=getattr(usage_record, "subscription", None),
+			snapshot_taken_at=getattr(usage_record, "snapshot_taken_at", None),
+			fallback_billable_seats=getattr(usage_record, "billable_seats", None),
+		)
 
 	def _get_seat_usage_pricing(self, usage_record) -> tuple[int, float]:
 		"""

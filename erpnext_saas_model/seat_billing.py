@@ -1021,15 +1021,58 @@ def create_seat_usage_records(date=None):
 			)
 
 
-def get_seat_usage_record_remark(backfill: bool = False, billable_seats: int | None = None) -> str:
-	"""Build the human-readable reason shown alongside seat-based usage records."""
-	reason = "Seat billing backfill snapshot" if backfill else "Seat billing snapshot"
-	if billable_seats is None:
-		return reason
+def _format_seat_change_log_description(change_log, fallback_billable_seats: int | None = None) -> str:
+	"""Format the human-readable seat change reason shown in invoice rows."""
+	old_seats = cint(getattr(change_log, "old_seats", 0) or 0)
+	new_seats = cint(getattr(change_log, "new_seats", 0) or 0)
 
-	seat_count = cint(billable_seats or 0)
-	seat_label = "seat" if seat_count == 1 else "seats"
-	return f"{reason} for {seat_count} billable {seat_label}"
+	if old_seats or new_seats:
+		return f"Seats changed: {old_seats} -> {new_seats}"
+
+	if fallback_billable_seats is not None:
+		seat_count = cint(fallback_billable_seats or 0)
+		return f"Seats changed: {seat_count}"
+
+	return "Seats changed"
+
+
+def get_seat_usage_record_remark(
+	subscription: str | dict[str, Any] | None = None,
+	snapshot_taken_at=None,
+	fallback_billable_seats: int | None = None,
+) -> str:
+	"""Build the human-readable reason shown alongside seat-based usage records."""
+	subscription_doc = None
+	if subscription:
+		subscription_doc = (
+			frappe.get_cached_doc("Subscription", subscription)
+			if isinstance(subscription, str)
+			else frappe.get_cached_doc("Subscription", subscription.get("name"))
+		)
+
+	change_log = None
+	if subscription_doc:
+		snapshot_taken_at = snapshot_taken_at or now_datetime()
+		change_log = frappe.get_all(
+			"Seat Change Log",
+			filters={
+				"subscription": subscription_doc.name,
+				"access_updated_at": ("<=", snapshot_taken_at),
+			},
+			fields=["old_seats", "new_seats", "change_type"],
+			order_by="access_updated_at desc, creation desc",
+			limit=1,
+		)
+		if change_log:
+			change_log = change_log[0]
+
+	if change_log:
+		return _format_seat_change_log_description(change_log, fallback_billable_seats=fallback_billable_seats)
+
+	if fallback_billable_seats is not None:
+		return _format_seat_change_log_description(None, fallback_billable_seats=fallback_billable_seats)
+
+	return "Seats changed"
 
 
 @frappe.whitelist()
@@ -1093,7 +1136,11 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	billable_seats = cint(subscription.billable_seats or 0)
 	seat_amount = flt(price_per_seat * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
-	remark = get_seat_usage_record_remark(backfill=backfill, billable_seats=billable_seats)
+	remark = get_seat_usage_record_remark(
+		subscription=subscription.name,
+		snapshot_taken_at=snapshot_taken_at,
+		fallback_billable_seats=billable_seats,
+	)
 
 	usage_record = frappe.get_doc(
 		{

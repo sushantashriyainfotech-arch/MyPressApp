@@ -26,13 +26,15 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=["name", "remark", "billable_seats"],
+		fields=["name", "remark", "billable_seats", "subscription", "snapshot_taken_at"],
 		order_by="creation asc",
 	)
 
 	for usage_record in usage_records:
-		remark = usage_record.remark or get_seat_usage_record_remark(
-			billable_seats=usage_record.billable_seats
+		remark = get_seat_usage_record_remark(
+			subscription=usage_record.subscription,
+			snapshot_taken_at=usage_record.snapshot_taken_at,
+			fallback_billable_seats=usage_record.billable_seats,
 		)
 		if usage_record.remark == remark:
 			continue
@@ -67,17 +69,19 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 				"plan": invoice_item.plan,
 				"docstatus": 1,
 			},
-			fields=["name", "remark", "billable_seats"],
+			fields=["name", "remark", "billable_seats", "subscription", "snapshot_taken_at"],
 			order_by="creation desc",
 			limit=1,
 		)
 		if usage_record:
 			usage_record = usage_record[0]
-			description = usage_record.remark or get_seat_usage_record_remark(
-				billable_seats=usage_record.billable_seats
+			description = get_seat_usage_record_remark(
+				subscription=usage_record.subscription,
+				snapshot_taken_at=usage_record.snapshot_taken_at,
+				fallback_billable_seats=usage_record.billable_seats,
 			)
 		else:
-			description = get_seat_usage_record_remark()
+			description = "Seats changed"
 
 		if not description:
 			continue
