@@ -1038,10 +1038,14 @@ def _format_seat_change_log_description(change_log, fallback_billable_seats: int
 
 def get_seat_usage_record_remark(
 	subscription: str | dict[str, Any] | None = None,
+	reference_at=None,
 	snapshot_taken_at=None,
 	fallback_billable_seats: int | None = None,
 ) -> str:
 	"""Build the human-readable reason shown alongside seat-based usage records."""
+	if reference_at is None:
+		reference_at = snapshot_taken_at
+
 	subscription_doc = None
 	if subscription:
 		subscription_doc = (
@@ -1052,12 +1056,15 @@ def get_seat_usage_record_remark(
 
 	change_log = None
 	if subscription_doc:
-		snapshot_taken_at = snapshot_taken_at or now_datetime()
+		if reference_at is None:
+			reference_at = now_datetime()
+		if not isinstance(reference_at, datetime):
+			reference_at = datetime.combine(getdate(reference_at), time(23, 59, 59))
 		change_log = frappe.get_all(
 			"Seat Change Log",
 			filters={
 				"subscription": subscription_doc.name,
-				"access_updated_at": ("<=", snapshot_taken_at),
+				"access_updated_at": ("<=", reference_at),
 			},
 			fields=["old_seats", "new_seats", "change_type"],
 			order_by="access_updated_at desc, creation desc",
@@ -1138,7 +1145,7 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	snapshot_taken_at = now_datetime()
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
-		snapshot_taken_at=snapshot_taken_at,
+		reference_at=snapshot_taken_at if not backfill else date,
 		fallback_billable_seats=billable_seats,
 	)
 

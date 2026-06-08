@@ -17,9 +17,12 @@ class Invoice(PressInvoice):
 		return is_seat_based_plan(plan)
 
 	def _get_seat_usage_description(self, usage_record) -> str:
+		if getattr(usage_record, "remark", None):
+			return usage_record.remark
+
 		return get_seat_usage_record_remark(
 			subscription=getattr(usage_record, "subscription", None),
-			snapshot_taken_at=getattr(usage_record, "snapshot_taken_at", None),
+			reference_at=getattr(usage_record, "snapshot_taken_at", None) or getattr(usage_record, "date", None),
 			fallback_billable_seats=getattr(usage_record, "billable_seats", None),
 		)
 
@@ -63,12 +66,15 @@ class Invoice(PressInvoice):
 					"document_name": usage_record.document_name,
 					"plan": usage_record.plan,
 					"description": self._get_seat_usage_description(usage_record),
+					"usage_record": usage_record.name,
 					"quantity": 0,
 					"rate": daily_rate,
 					"site": usage_record.site,
 				},
 			)
 		else:
+			if not getattr(invoice_item, "usage_record", None):
+				invoice_item.usage_record = usage_record.name
 			invoice_item.rate = daily_rate
 			if not getattr(invoice_item, "description", None):
 				invoice_item.description = self._get_seat_usage_description(usage_record)

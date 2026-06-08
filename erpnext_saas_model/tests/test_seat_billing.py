@@ -124,6 +124,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			invoice.add_usage_record(usage_record)
 
 		self.assertEqual(invoice.items[0].description, "Seats changed: 2 -> 5")
+		self.assertEqual(invoice.items[0].usage_record, usage_record.name)
 
 	def test_backfill_patch_sets_missing_usage_record_remarks(self):
 		captured = []
@@ -138,6 +139,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 						remark=None,
 						billable_seats=5,
 						subscription="SUB-001",
+						date="2026-05-29",
 						snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
 					),
 					SimpleNamespace(
@@ -145,6 +147,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 						remark="Seats changed: 3 -> 4",
 						billable_seats=4,
 						subscription="SUB-002",
+						date="2026-05-29",
 						snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
 					),
 				]
@@ -189,7 +192,9 @@ class TestSeatBillingHelpers(FrappeTestCase):
 						document_type="Site",
 						document_name="site-001",
 						plan="PLAN-001",
-						description="",
+						rate=8.33,
+						description="Seats changed: 7 -> 8",
+						usage_record=None,
 					),
 					SimpleNamespace(
 						name="ITEM-002",
@@ -197,7 +202,9 @@ class TestSeatBillingHelpers(FrappeTestCase):
 						document_type="Site",
 						document_name="site-002",
 						plan="PLAN-001",
-						description="",
+						rate=8.33,
+						description="Seats changed: 7 -> 8",
+						usage_record=None,
 					),
 				]
 			if doctype == "Usage Record":
@@ -208,6 +215,22 @@ class TestSeatBillingHelpers(FrappeTestCase):
 							subscription="SUB-001",
 							remark=None,
 							billable_seats=5,
+							seat_amount=250,
+							amount=250,
+							date="2026-06-30",
+							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
+						)
+					]
+				if filters and filters.get("invoice") == "INV-002":
+					return [
+						SimpleNamespace(
+							name="UR-002",
+							subscription="SUB-002",
+							remark="Seats changed: 3 -> 4",
+							billable_seats=4,
+							seat_amount=250,
+							amount=250,
+							date="2026-06-30",
 							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
 						)
 					]
@@ -215,6 +238,8 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			if doctype == "Seat Change Log":
 				if filters and filters.get("subscription") == "SUB-001":
 					return [SimpleNamespace(old_seats=2, new_seats=5, change_type="Increase")]
+				if filters and filters.get("subscription") == "SUB-002":
+					return [SimpleNamespace(old_seats=3, new_seats=4, change_type="Increase")]
 				return []
 			raise AssertionError(f"Unexpected doctype: {doctype}")
 
@@ -232,6 +257,13 @@ class TestSeatBillingHelpers(FrappeTestCase):
 				(
 					"Invoice Item",
 					"ITEM-001",
+					"usage_record",
+					"UR-001",
+					False,
+				),
+				(
+					"Invoice Item",
+					"ITEM-001",
 					"description",
 					"Seats changed: 2 -> 5",
 					False,
@@ -239,8 +271,15 @@ class TestSeatBillingHelpers(FrappeTestCase):
 				(
 					"Invoice Item",
 					"ITEM-002",
+					"usage_record",
+					"UR-002",
+					False,
+				),
+				(
+					"Invoice Item",
+					"ITEM-002",
 					"description",
-					"Seats changed",
+					"Seats changed: 3 -> 4",
 					False,
 				),
 			],
