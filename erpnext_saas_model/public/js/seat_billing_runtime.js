@@ -245,15 +245,14 @@
 				badgeEl.dataset.role = 'plan-badge';
 				button.prepend(badgeEl);
 			}
-			badgeEl.className = `erp-seat-billing-plan-badge pointer-events-none inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ${
+			badgeEl.className = `erp-seat-billing-plan-badge pointer-events-none flex w-full items-center justify-start rounded-t-md rounded-b-none px-3 py-1 text-[10px] font-semibold leading-none tracking-wide ${
 				seatBased
-					? 'border border-ink-gray-9 bg-ink-gray-9 text-white shadow-sm'
-					: 'border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
+					? 'border-b border-ink-gray-9 bg-ink-gray-9 text-white shadow-sm'
+					: 'border-b border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
 			}`;
-			badgeEl.style.display = 'block';
-			badgeEl.style.width = 'fit-content';
-			badgeEl.style.marginLeft = 'auto';
-			badgeEl.style.marginBottom = '0.35rem';
+			badgeEl.style.display = 'flex';
+			badgeEl.style.width = '100%';
+			badgeEl.style.margin = '0';
 			badgeEl.textContent = badgeText;
 
 			const normalizedText = normalize(button.textContent || '');
