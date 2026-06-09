@@ -62,6 +62,42 @@ class Subscription(PressSubscription):
 		self.total_amount = get_plan_total_price(plan) if plan else 0
 		self.seats_last_updated = now_datetime()
 
+	def _sync_linked_site_billable_seats(self, plan) -> None:
+		"""Persist the current seat count onto the linked Site before parent sync runs."""
+		site_name = getattr(self, "site", None) or (
+			self.document_name if getattr(self, "document_type", None) == "Site" else None
+		)
+		if not site_name:
+			self._log_subscription_seat_debug(
+				"sync_site_billable_seats.skipped",
+				{"subscription": self.name, "reason": "NO_SITE_LINKED"},
+			)
+			return
+
+		if not is_seat_based_plan(plan):
+			self._log_subscription_seat_debug(
+				"sync_site_billable_seats.skipped",
+				{
+					"subscription": self.name,
+					"site": site_name,
+					"reason": "RESOURCE_BASED",
+				},
+			)
+			return
+
+		current_seats = cint(getattr(self, "billable_seats", 0) or 0)
+		previous_site_seats = cint(frappe.db.get_value("Site", site_name, "billable_seats") or 0)
+		frappe.db.set_value("Site", site_name, "billable_seats", current_seats, update_modified=False)
+		self._log_subscription_seat_debug(
+			"sync_site_billable_seats.updated",
+			{
+				"subscription": self.name,
+				"site": site_name,
+				"previous_site_billable_seats": previous_site_seats,
+				"current_subscription_billable_seats": current_seats,
+			},
+		)
+
 	def before_validate(self):
 		"""
 		Preprocessing before standard validation.
@@ -245,11 +281,15 @@ class Subscription(PressSubscription):
 		- Logs any change in seat count for billing audit.
 		- Synchronizes seat access (permissions/limits) to the underlying site.
 		"""
-		super().on_update()
 		if not self.plan:
+			super().on_update()
 			return
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
+		if is_seat_based_plan(plan):
+			self._sync_linked_site_billable_seats(plan)
+
+		super().on_update()
 		if not is_seat_based_plan(plan):
 			return
 
