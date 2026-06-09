@@ -21,7 +21,7 @@
 		country: 'United States',
 	};
 
-	const ROUTE_HINTS = ['sites/new', '/app/press/site/', '/overview', '/dashboard/sites/'];
+	const ROUTE_HINTS = ['/app/press/site/', '/overview', '/dashboard/sites/'];
 	const EXCLUDED_ROUTE_HINTS = ['/dashboard/create-site/*']; // Add routes here to stop the script from running
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
 	const DEBUG = true; // Set to false in production
@@ -91,6 +91,7 @@
 	}
 
 	async function getCurrentTeamData() {
+		console.log(window);
 		try {
 			const res = await fetch('/api/method/press.api.team.get_current_team', {
 				credentials: 'same-origin',
