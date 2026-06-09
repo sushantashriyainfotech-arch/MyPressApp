@@ -230,6 +230,8 @@
 			const plan = state.plans[index];
 			if (!plan) return;
 
+			button.classList.add('relative');
+			button.style.position = 'relative';
 			button.dataset.planName = plan.name;
 			button.dataset.billingType = plan.billing_type || '';
 
@@ -241,7 +243,7 @@
 				badgeEl.dataset.role = 'plan-badge';
 				button.prepend(badgeEl);
 			}
-			badgeEl.className = `erp-seat-billing-plan-badge absolute right-2 top-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ${
+			badgeEl.className = `erp-seat-billing-plan-badge absolute right-2 top-2 z-10 pointer-events-none inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ${
 				normalizedBadgeText === normalize('Seat Based')
 					? 'border border-ink-gray-9 bg-ink-gray-9 text-white shadow-sm'
 					: 'border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
