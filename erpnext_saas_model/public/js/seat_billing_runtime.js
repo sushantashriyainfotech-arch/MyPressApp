@@ -245,11 +245,10 @@
 				badgeEl.dataset.role = 'plan-badge';
 				button.prepend(badgeEl);
 			}
-			badgeEl.className = `erp-seat-billing-plan-badge pointer-events-none flex w-full items-center justify-start rounded-t-md rounded-b-none px-3 py-1 text-[10px] font-semibold leading-none tracking-wide ${
-				seatBased
-					? 'border-b border-ink-gray-9 bg-ink-gray-9 text-white shadow-sm'
-					: 'border-b border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
-			}`;
+			badgeEl.className = `erp-seat-billing-plan-badge pointer-events-none flex w-full items-center justify-start rounded-t-md rounded-b-none px-3 py-1 text-[10px] font-semibold leading-none tracking-wide ${seatBased
+				? 'border-b border-ink-gray-9 bg-ink-gray-9 text-gray-9 shadow-sm'
+				: 'border-b border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
+				}`;
 			badgeEl.style.display = 'flex';
 			badgeEl.style.width = '100%';
 			badgeEl.style.margin = '0';
@@ -745,12 +744,12 @@
 			nestedArgs?.subscription_plan ||
 			nestedDocs?.subscription_plan ||
 			nestedDocs?.plan;
-	const plan = findPlanByBillingType(
+		const plan = findPlanByBillingType(
 			parsed?.billing_type ||
-				nestedArgs?.billing_type ||
-				nestedDocs?.billing_type ||
-				(state.selectedPlan && state.selectedPlan.billing_type) ||
-				'',
+			nestedArgs?.billing_type ||
+			nestedDocs?.billing_type ||
+			(state.selectedPlan && state.selectedPlan.billing_type) ||
+			'',
 			planName || state.selectedPlan?.name || '',
 		);
 
@@ -824,10 +823,10 @@
 			return cloned;
 		}
 
-	const seats = clampSeats(plan, state.billableSeats);
-	const effectivePriceInr = Number(plan?.price_inr || 0);
-	const effectivePriceUsd = Number(plan?.price_usd || 0);
-	const effectiveSelectedPrice = getPlanSeatPrice(plan);
+		const seats = clampSeats(plan, state.billableSeats);
+		const effectivePriceInr = Number(plan?.price_inr || 0);
+		const effectivePriceUsd = Number(plan?.price_usd || 0);
+		const effectiveSelectedPrice = getPlanSeatPrice(plan);
 
 		if (bodyIsSearchParams) {
 			let mutated = false;
@@ -893,9 +892,9 @@
 			}
 
 			const cloned = JSON.parse(JSON.stringify(parsed));
-		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceInr, effectivePriceUsd)) return body;
-		return JSON.stringify(cloned);
-	}
+			if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceInr, effectivePriceUsd)) return body;
+			return JSON.stringify(cloned);
+		}
 
 		const cloned = parsed;
 		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceInr, effectivePriceUsd)) return body;
