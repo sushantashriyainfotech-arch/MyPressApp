@@ -11,11 +11,12 @@ from erpnext_saas_model.seat_billing import (
 	backfill_missing_seat_usage_records,
 	create_seat_usage_record,
 	get_billing_effective_from,
-	get_plan_price_per_seat,
+	get_plan_price_for_currency,
 	get_plan_total_price,
 	get_subscription_seat_context,
 	is_seat_based_plan,
 	get_site_user_active_count,
+	get_team_currency,
 	log_seat_change,
 	sync_site_access,
 	validate_seat_change,
@@ -72,9 +73,19 @@ class Subscription(PressSubscription):
 
 		return requested_seats
 
+	def _get_currency_prices(self, plan) -> tuple[str, float, float, float]:
+		"""Return the team currency, both plan prices, and the selected seat price."""
+		team_currency = get_team_currency(getattr(self, "team", None))
+		price_inr = flt(getattr(plan, "price_inr", 0) or 0, 2)
+		price_usd = flt(getattr(plan, "price_usd", 0) or 0, 2)
+		selected_price = get_plan_price_for_currency(plan, team_currency)
+		return team_currency, price_inr, price_usd, selected_price
+
 	def _clear_seat_billing_fields(self, plan=None) -> None:
 		"""Reset seat-billing fields when the subscription is no longer seat-based."""
 		self.billable_seats = 1
+		self.price_inr = 0
+		self.price_usd = 0
 		self.price_per_seat = 0
 		self.total_amount = get_plan_total_price(plan) if plan else 0
 		self.seats_last_updated = now_datetime()
@@ -119,8 +130,8 @@ class Subscription(PressSubscription):
 		"""
 		Preprocessing before standard validation.
 		- Ensures seat-based plans have a billable_seats count.
-		- Fetches and sets the latest price_per_seat from the Plan.
-		- Calculates the total_amount (billable_seats * price_per_seat).
+		- Fetches and sets the latest INR/USD plan prices.
+		- Calculates the total_amount from the team's selected currency.
 		"""
 		super().before_validate()
 		_log_subscription_seat_debug(
@@ -156,13 +167,12 @@ class Subscription(PressSubscription):
 
 		# Keep subscription seats at or above the site's billed seat count
 		self.billable_seats = self._get_effective_billable_seats(plan)
+		team_currency, price_inr, price_usd, selected_price = self._get_currency_prices(plan)
 
-		# Sync price per seat from plan if not explicitly set
-		if not getattr(self, "price_per_seat", None):
-			self.price_per_seat = get_plan_price_per_seat(plan)
-
-		# Calculate total subscription amount
-		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
+		self.price_inr = price_inr
+		self.price_usd = price_usd
+		self.price_per_seat = selected_price
+		self.total_amount = flt(cint(self.billable_seats) * flt(selected_price or 0, 2), 2)
 		self.seats_last_updated = getattr(self, "seats_last_updated", None) or now_datetime()
 		_log_subscription_seat_debug(
 			"before_validate.complete",
@@ -170,7 +180,10 @@ class Subscription(PressSubscription):
 				"subscription": self.name,
 				"plan": self.plan,
 				"billable_seats": self.billable_seats,
-				"price_per_seat": self.price_per_seat,
+				"team_currency": team_currency,
+				"price_inr": self.price_inr,
+				"price_usd": self.price_usd,
+				"selected_price": selected_price,
 				"total_amount": self.total_amount,
 				"seats_last_updated": self.seats_last_updated,
 			},
@@ -216,6 +229,7 @@ class Subscription(PressSubscription):
 		
 		# Ensure seat count stays within plan boundaries and doesn't fall behind the site state
 		self.billable_seats = self._get_effective_billable_seats(plan)
+		team_currency, price_inr, price_usd, selected_price = self._get_currency_prices(plan)
 		_log_subscription_seat_debug(
 			"validate.compare",
 			{
@@ -224,7 +238,10 @@ class Subscription(PressSubscription):
 				"plan_min_seats": min_seats,
 				"plan_max_seats": max_seats,
 				"billable_seats": self.billable_seats,
-				"price_per_seat": getattr(self, "price_per_seat", None),
+				"team_currency": team_currency,
+				"price_inr": price_inr,
+				"price_usd": price_usd,
+				"selected_price": selected_price,
 				"site_billable_seats": frappe.db.get_value(
 					"Site", self.document_name, "billable_seats"
 				)
@@ -265,17 +282,20 @@ class Subscription(PressSubscription):
 			)
 			frappe.throw(f"This plan allows a maximum of {max_seats} seats.")
 
-		if not getattr(self, "price_per_seat", None):
-			self.price_per_seat = get_plan_price_per_seat(plan)
-
-		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
+		self.price_inr = price_inr
+		self.price_usd = price_usd
+		self.price_per_seat = selected_price
+		self.total_amount = flt(cint(self.billable_seats) * flt(selected_price or 0, 2), 2)
 		_log_subscription_seat_debug(
 			"validate.complete",
 			{
 				"subscription": self.name,
 				"plan": self.plan,
 				"billable_seats": self.billable_seats,
-				"price_per_seat": self.price_per_seat,
+				"team_currency": team_currency,
+				"price_inr": self.price_inr,
+				"price_usd": self.price_usd,
+				"selected_price": selected_price,
 				"total_amount": self.total_amount,
 			},
 		)
@@ -372,7 +392,9 @@ class Subscription(PressSubscription):
 		self.flags.skip_seat_change_log = True # Prevent duplicate logging (one here, one in on_update)
 		old_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		self.billable_seats = cint(result["billable_seats"])
-		self.price_per_seat = flt(result["price_per_seat"], 2)
+		self.price_inr = flt(result.get("price_inr") or 0, 2)
+		self.price_usd = flt(result.get("price_usd") or 0, 2)
+		self.price_per_seat = flt(result.get("selected_price") or result.get("price_per_seat") or 0, 2)
 		self.total_amount = flt(result["total_amount"], 2)
 		self.seats_last_updated = now_datetime()
 		self.save(ignore_permissions=True)
@@ -392,7 +414,9 @@ class Subscription(PressSubscription):
 		return {
 			"subscription": self.name,
 			"billable_seats": self.billable_seats,
-			"price_per_seat": self.price_per_seat,
+			"price_inr": self.price_inr,
+			"price_usd": self.price_usd,
+			"selected_price": self.price_per_seat,
 			"total_amount": self.total_amount,
 			"message": (
 				f"Your seat count has been updated to {self.billable_seats}. "

@@ -53,7 +53,8 @@ def get_site_plans():
 			continue
 
 		plan["billing_type"] = getattr(plan_doc, "billing_type", None)
-		plan["price_per_seat"] = getattr(plan_doc, "price_per_seat", None)
+		plan["price_inr"] = getattr(plan_doc, "price_inr", None)
+		plan["price_usd"] = getattr(plan_doc, "price_usd", None)
 		plan["min_seats"] = getattr(plan_doc, "min_seats", None)
 		plan["max_seats"] = getattr(plan_doc, "max_seats", None)
 		plan["next_plan"] = getattr(plan_doc, "next_plan", None)

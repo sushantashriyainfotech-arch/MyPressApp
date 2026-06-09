@@ -30,6 +30,7 @@ def execute():
 	ensure_invoice_fields()
 	ensure_invoice_item_fields()
 	ensure_existing_site_plans_remain_resource_based()
+	ensure_existing_seat_prices_are_migrated()
 
 
 def ensure_site_plan_fields():
@@ -47,14 +48,26 @@ def ensure_site_plan_fields():
 	)
 	_ensure_custom_field(
 		"Site Plan",
-		"price_per_seat",
+		"price_inr",
 		{
-			"label": "Price Per Seat",
-			"fieldname": "price_per_seat",
+			"label": "Price (INR)",
+			"fieldname": "price_inr",
 			"fieldtype": "Currency",
 			"options": "INR",
 			"mandatory_depends_on": "eval:doc.billing_type == 'Seat Based'",
 			"insert_after": "billing_type",
+		},
+	)
+	_ensure_custom_field(
+		"Site Plan",
+		"price_usd",
+		{
+			"label": "Price (USD)",
+			"fieldname": "price_usd",
+			"fieldtype": "Currency",
+			"options": "USD",
+			"mandatory_depends_on": "eval:doc.billing_type == 'Seat Based'",
+			"insert_after": "price_inr",
 		},
 	)
 	_ensure_custom_field(
@@ -66,7 +79,7 @@ def ensure_site_plan_fields():
 			"fieldtype": "Int",
 			"default": "1",
 			"depends_on": "eval:doc.billing_type == 'Seat Based'",
-			"insert_after": "price_per_seat",
+			"insert_after": "price_usd",
 		},
 	)
 	_ensure_custom_field(
@@ -126,16 +139,30 @@ def ensure_subscription_fields():
 	)
 	_ensure_custom_field(
 		"Subscription",
-		"price_per_seat",
+		"price_inr",
 		{
-			"label": "Price Per Seat",
-			"fieldname": "price_per_seat",
+			"label": "Price (INR)",
+			"fieldname": "price_inr",
 			"fieldtype": "Currency",
 			"options": "INR",
-			"fetch_from": "plan.price_per_seat",
+			"fetch_from": "plan.price_inr",
 			"fetch_if_empty": 1,
 			"depends_on": "eval:doc.plan_type == 'Site Plan'",
 			"insert_after": "billable_seats",
+		},
+	)
+	_ensure_custom_field(
+		"Subscription",
+		"price_usd",
+		{
+			"label": "Price (USD)",
+			"fieldname": "price_usd",
+			"fieldtype": "Currency",
+			"options": "USD",
+			"fetch_from": "plan.price_usd",
+			"fetch_if_empty": 1,
+			"depends_on": "eval:doc.plan_type == 'Site Plan'",
+			"insert_after": "price_inr",
 		},
 	)
 	_ensure_custom_field(
@@ -147,7 +174,7 @@ def ensure_subscription_fields():
 			"fieldtype": "Currency",
 			"options": "INR",
 			"depends_on": "eval:doc.plan_type == 'Site Plan'",
-			"insert_after": "price_per_seat",
+			"insert_after": "price_usd",
 		},
 	)
 	_ensure_custom_field(
@@ -209,13 +236,24 @@ def ensure_invoice_fields():
 	)
 	_ensure_custom_field(
 		"Invoice",
-		"price_per_seat",
+		"price_inr",
 		{
-			"label": "Price Per Seat",
-			"fieldname": "price_per_seat",
+			"label": "Price (INR)",
+			"fieldname": "price_inr",
 			"fieldtype": "Currency",
 			"options": "INR",
 			"insert_after": "billable_seats",
+		},
+	)
+	_ensure_custom_field(
+		"Invoice",
+		"price_usd",
+		{
+			"label": "Price (USD)",
+			"fieldname": "price_usd",
+			"fieldtype": "Currency",
+			"options": "USD",
+			"insert_after": "price_inr",
 		},
 	)
 
@@ -243,6 +281,37 @@ def ensure_existing_site_plans_remain_resource_based():
 		UPDATE `tabSite Plan`
 		SET `billing_type` = 'Resource Based'
 		WHERE IFNULL(`billing_type`, '') = ''
+		"""
+	)
+	frappe.db.commit()
+
+
+def ensure_existing_seat_prices_are_migrated():
+	frappe.db.sql(
+		"""
+		UPDATE `tabSite Plan`
+		SET
+			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
+			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
+		WHERE IFNULL(`billing_type`, '') = 'Seat Based'
+		"""
+	)
+	frappe.db.sql(
+		"""
+		UPDATE `tabSubscription`
+		SET
+			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
+			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
+		WHERE IFNULL(`plan_type`, '') = 'Site Plan'
+		"""
+	)
+	frappe.db.sql(
+		"""
+		UPDATE `tabInvoice`
+		SET
+			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
+			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
+		WHERE IFNULL(`type`, '') = 'Subscription'
 		"""
 	)
 	frappe.db.commit()

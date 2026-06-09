@@ -193,6 +193,13 @@
 		return Math.max(Number(plan?.min_seats || 1), activeSubscriptionSeats);
 	}
 
+	function getPlanSeatPrice(plan) {
+		if (!plan) return 0;
+		return state.currency === 'INR'
+			? Number(plan.price_inr || plan.price_usd || 0)
+			: Number(plan.price_usd || plan.price_inr || 0);
+	}
+
 	function findPlanByName(planName) {
 		if (!planName) return null;
 		const normalizedName = normalize(planName);
@@ -344,7 +351,7 @@
 	}
 
 	function getEffectiveSeatPrice(plan, seats) {
-		return Number(plan?.price_per_seat || 0) * Number(seats || 0);
+		return getPlanSeatPrice(plan) * Number(seats || 0);
 	}
 
 	function renderPanel() {
@@ -391,7 +398,8 @@
 
 		const minSeats = Number(plan.min_seats || 1);
 		const maxSeats = Number(plan.max_seats || 0);
-		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
+		const selectedPrice = getPlanSeatPrice(plan);
+		const total = Number(state.billableSeats || 0) * Number(selectedPrice || 0);
 		const currentSubscriptionText = state.activeSubscriptionContext
 			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount}`
 			: `Defaulting to plan minimum of ${initialSeats}`;
@@ -425,7 +433,7 @@
 						class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
 						data-role="seat-input"
 					/>
-					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(plan.price_per_seat)} per seat</span>
+					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(selectedPrice)} per seat</span>
 				</div>
 			</div>
 			<div class="mt-4 text-sm text-ink-gray-6 bg-surface-gray-2 p-3 rounded border border-outline-gray-2">
@@ -448,7 +456,7 @@
 			const floorSeats = minSeats;
 			state.billableSeats = Math.max(Number(input.value || 0), floorSeats);
 			input.value = String(state.billableSeats);
-			const newTotal = Number(state.billableSeats) * Number(plan.price_per_seat || 0);
+			const newTotal = Number(state.billableSeats) * Number(selectedPrice || 0);
 			state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(newTotal);
 			const newWarning = shouldShowWarning(plan, state.billableSeats)
 				? plan.next_plan
@@ -624,17 +632,19 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	// Network interception
 	// ─────────────────────────────────────────────────────────────────────────────
-	function updateSeatBillingPayloadObject(payload, seats, effectivePriceUsd) {
+	function updateSeatBillingPayloadObject(payload, seats, effectivePriceInr, effectivePriceUsd) {
 		if (!payload || typeof payload !== 'object') return false;
 
 		let mutated = false;
 		if (payload.site && typeof payload.site === 'object') {
 			payload.site.billable_seats = seats;
+			payload.site.price_inr = effectivePriceInr;
 			payload.site.price_usd = effectivePriceUsd;
 			mutated = true;
 		}
 		if (payload.doc && payload.doc.doctype === 'Site' && typeof payload.doc === 'object') {
 			payload.doc.billable_seats = seats;
+			payload.doc.price_inr = effectivePriceInr;
 			payload.doc.price_usd = effectivePriceUsd;
 			mutated = true;
 		}
@@ -642,15 +652,18 @@
 			payload.args = {};
 		}
 		payload.args.billable_seats = seats;
+		payload.args.price_inr = effectivePriceInr;
 		payload.args.price_usd = effectivePriceUsd;
 		mutated = true;
 
 		if (payload.plan && !payload.billable_seats) {
 			payload.billable_seats = seats;
+			payload.price_inr = effectivePriceInr;
 			mutated = true;
 		}
 		if (payload.subscription_plan && !payload.billable_seats) {
 			payload.billable_seats = seats;
+			payload.price_inr = effectivePriceInr;
 			mutated = true;
 		}
 
@@ -759,19 +772,23 @@
 			return cloned;
 		}
 
-		const seats = clampSeats(plan, state.billableSeats);
-		const effectivePriceUsd = getEffectiveSeatPrice(plan, seats);
+	const seats = clampSeats(plan, state.billableSeats);
+	const effectivePriceInr = Number(plan?.price_inr || 0);
+	const effectivePriceUsd = Number(plan?.price_usd || 0);
+	const effectiveSelectedPrice = getPlanSeatPrice(plan);
 
 		if (bodyIsSearchParams) {
 			let mutated = false;
 			if (nestedArgs) {
 				nestedArgs.billable_seats = seats;
+				nestedArgs.price_inr = effectivePriceInr;
 				nestedArgs.price_usd = effectivePriceUsd;
 				parsed.set('args', JSON.stringify(nestedArgs));
 				mutated = true;
 			}
 			if (nestedDocs && nestedDocs.doctype === 'Site') {
 				nestedDocs.billable_seats = seats;
+				nestedDocs.price_inr = effectivePriceInr;
 				nestedDocs.price_usd = effectivePriceUsd;
 				parsed.set('docs', JSON.stringify(nestedDocs));
 				mutated = true;
@@ -784,12 +801,14 @@
 			let mutated = false;
 			if (nestedArgs) {
 				nestedArgs.billable_seats = seats;
+				nestedArgs.price_inr = effectivePriceInr;
 				nestedArgs.price_usd = effectivePriceUsd;
 				parsed.set('args', JSON.stringify(nestedArgs));
 				mutated = true;
 			}
 			if (nestedDocs && nestedDocs.doctype === 'Site') {
 				nestedDocs.billable_seats = seats;
+				nestedDocs.price_inr = effectivePriceInr;
 				nestedDocs.price_usd = effectivePriceUsd;
 				parsed.set('docs', JSON.stringify(nestedDocs));
 				mutated = true;
@@ -806,12 +825,14 @@
 				let mutated = false;
 				if (nestedArgs) {
 					nestedArgs.billable_seats = seats;
+					nestedArgs.price_inr = effectivePriceInr;
 					nestedArgs.price_usd = effectivePriceUsd;
 					parsed.set('args', JSON.stringify(nestedArgs));
 					mutated = true;
 				}
 				if (nestedDocs && nestedDocs.doctype === 'Site') {
 					nestedDocs.billable_seats = seats;
+					nestedDocs.price_inr = effectivePriceInr;
 					nestedDocs.price_usd = effectivePriceUsd;
 					parsed.set('docs', JSON.stringify(nestedDocs));
 					mutated = true;
@@ -820,9 +841,9 @@
 			}
 
 			const cloned = JSON.parse(JSON.stringify(parsed));
-			if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceUsd)) return body;
-			return JSON.stringify(cloned);
-		}
+		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceInr, effectivePriceUsd)) return body;
+		return JSON.stringify(cloned);
+	}
 
 		const cloned = parsed;
 		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceUsd)) return body;

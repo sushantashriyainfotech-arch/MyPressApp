@@ -10,6 +10,13 @@
 		);
 	}
 
+	function getSelectedPrice(frm) {
+		const currency = getCurrencyCode();
+		const inr = Number(frm.doc.price_inr || 0);
+		const usd = Number(frm.doc.price_usd || 0);
+		return currency === "INR" ? inr || usd : usd || inr;
+	}
+
 	function formatMoney(value) {
 		const amount = Number(value || 0);
 		const currency = getCurrencyCode();
@@ -33,15 +40,15 @@
 		}
 
 		const seats = Number(frm.doc.billable_seats || 0);
-		const price = Number(frm.doc.price_per_seat || 0);
-		const total = Number((seats * price).toFixed(2));
+		const selectedPrice = Number(getSelectedPrice(frm) || 0);
+		const total = Number((seats * selectedPrice).toFixed(2));
 
 		if (Number(frm.doc.total_amount || 0) !== total) {
 			frm.set_value("total_amount", total);
 			return;
 		}
 
-		frm.dashboard.set_headline(`${seats} seats × ${formatMoney(price)} = ${formatMoney(total)}`);
+		frm.dashboard.set_headline(`${seats} seats × ${formatMoney(selectedPrice)} = ${formatMoney(total)}`);
 	}
 
 	frappe.ui.form.on("Subscription", {
@@ -49,9 +56,10 @@
 			if (frm.doc.plan_type !== "Site Plan") return;
 			updateSeatTotals(frm);
 			frm.add_custom_button(__("Seat Summary"), () => {
+				const selectedPrice = getSelectedPrice(frm);
 				frappe.msgprint({
 					title: __("Current seat commitment"),
-					message: `${Number(frm.doc.billable_seats || 0)} seats × ${formatMoney(frm.doc.price_per_seat)} = ${formatMoney(frm.doc.total_amount)}`,
+					message: `${Number(frm.doc.billable_seats || 0)} seats × ${formatMoney(selectedPrice)} = ${formatMoney(frm.doc.total_amount)}`,
 					indicator: "blue",
 				});
 			});
@@ -62,7 +70,10 @@
 		billable_seats(frm) {
 			updateSeatTotals(frm);
 		},
-		price_per_seat(frm) {
+		price_inr(frm) {
+			updateSeatTotals(frm);
+		},
+		price_usd(frm) {
 			updateSeatTotals(frm);
 		},
 		total_amount(frm) {

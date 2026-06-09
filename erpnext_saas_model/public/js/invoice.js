@@ -8,7 +8,7 @@
 			frappe?.boot?.currency ||
 			frappe?.boot?.sysdefaults?.currency ||
 			frappe?.session?.currency ||
-			'USD'
+			"USD"
 		);
 	}
 
@@ -17,9 +17,9 @@
 		const currency = getCurrencyCode();
 		try {
 			return new Intl.NumberFormat(undefined, {
-				style: 'currency',
+				style: "currency",
 				currency,
-				currencyDisplay: 'symbol',
+				currencyDisplay: "symbol",
 			}).format(amount);
 		} catch (error) {
 			return `${currency} ${amount.toFixed(2)}`;
@@ -88,7 +88,10 @@
 		billable_seats(frm) {
 			updateSeatHeadline(frm);
 		},
-		price_per_seat(frm) {
+		price_inr(frm) {
+			updateSeatHeadline(frm);
+		},
+		price_usd(frm) {
 			updateSeatHeadline(frm);
 		},
 		items(frm) {

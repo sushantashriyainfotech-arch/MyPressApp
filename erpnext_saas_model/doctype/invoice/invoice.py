@@ -5,7 +5,12 @@ from frappe.utils import cint, flt, fmt_money
 
 from press.press.doctype.invoice.invoice import Invoice as PressInvoice
 
-from erpnext_saas_model.seat_billing import get_seat_usage_record_remark, is_seat_based_plan
+from erpnext_saas_model.seat_billing import (
+	get_plan_price_for_currency,
+	get_seat_usage_record_remark,
+	get_team_currency,
+	is_seat_based_plan,
+)
 
 
 class Invoice(PressInvoice):
@@ -34,10 +39,10 @@ class Invoice(PressInvoice):
 		"""
 		billable_seats = cint(getattr(self, "billable_seats", 0) or getattr(usage_record, "billable_seats", 0) or 1)
 		monthly_seat_total = flt(getattr(usage_record, "seat_amount", 0) or getattr(usage_record, "amount", 0), 2)
-		price_per_seat = flt(monthly_seat_total / billable_seats, 2) if billable_seats else monthly_seat_total
+		monthly_seat_rate = flt(monthly_seat_total / billable_seats, 2) if billable_seats else monthly_seat_total
 		usage_record_date = frappe.utils.getdate(usage_record.date)
 		days_in_month = frappe.utils.get_last_day(usage_record_date).day or 30
-		daily_rate = flt((price_per_seat * billable_seats) / days_in_month, 2)
+		daily_rate = flt((monthly_seat_rate * billable_seats) / days_in_month, 2)
 		return billable_seats, daily_rate
 
 	def add_usage_record(self, usage_record):
@@ -188,5 +193,11 @@ class Invoice(PressInvoice):
 			return
 
 		latest_item = seat_items[-1]
+		plan = frappe.get_cached_doc("Site Plan", latest_item.plan)
+		team_currency = get_team_currency(self.team)
 		self.billable_seats = cint(getattr(self, "billable_seats", 0) or 0)
-		self.price_per_seat = flt(latest_item.rate or 0, 2)
+		self.price_inr = flt(getattr(plan, "price_inr", 0) or 0, 2)
+		self.price_usd = flt(getattr(plan, "price_usd", 0) or 0, 2)
+		selected_price = get_plan_price_for_currency(plan, team_currency)
+		self.price_per_seat = selected_price
+		self.total_amount = flt(selected_price * self.billable_seats, 2)

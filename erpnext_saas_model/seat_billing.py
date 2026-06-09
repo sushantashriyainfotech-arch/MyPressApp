@@ -45,20 +45,42 @@ def get_plan_total_price(plan: str | dict[str, Any] | None) -> float:
 	return flt(price, 2)
 
 
-def get_plan_price_per_seat(plan: str | dict[str, Any] | None) -> float:
-	"""
-	Fetches the configured price per seat for a specific Site Plan.
-	Defaults to 0.0 if not found.
-	"""
+def get_team_currency(team: str | dict[str, Any] | None) -> str:
+	"""Resolve the team's billing currency, defaulting to USD."""
+	if not team:
+		return "USD"
+
+	if isinstance(team, dict):
+		return (team.get("currency") or "USD").upper()
+
+	if hasattr(team, "currency"):
+		return (getattr(team, "currency", None) or "USD").upper()
+
+	return (frappe.db.get_value("Team", team, "currency") or "USD").upper()
+
+
+def get_plan_price_for_currency(
+	plan: str | dict[str, Any] | None,
+	currency: str | None = None,
+) -> float:
+	"""Return the plan price for the requested currency, with fallback to the other field."""
 	if not plan:
 		return 0.0
 
-	if isinstance(plan, dict):
-		price = plan.get("price_per_seat") or 0
-	else:
-		price = frappe.db.get_value("Site Plan", plan, "price_per_seat") or 0
+	if isinstance(plan, str):
+		plan = frappe.get_cached_doc("Site Plan", plan)
+
+	currency = (currency or "USD").upper()
+	preferred_field = "price_inr" if currency == "INR" else "price_usd"
+	fallback_field = "price_usd" if preferred_field == "price_inr" else "price_inr"
+	price = getattr(plan, preferred_field, None) or getattr(plan, fallback_field, None) or 0
 
 	return flt(price, 2)
+
+
+def get_plan_price_per_seat(plan: str | dict[str, Any] | None, currency: str | None = None) -> float:
+	"""Backward-compatible wrapper for the currency-aware seat price helper."""
+	return get_plan_price_for_currency(plan, currency=currency)
 
 
 def get_seat_plans() -> list[dict[str, Any]]:
@@ -69,8 +91,8 @@ def get_seat_plans() -> list[dict[str, Any]]:
 	return frappe.get_all(
 		"Site Plan",
 		filters={"enabled": 1, "billing_type": "Seat Based"},
-		fields=["name", "plan_title", "price_per_seat", "min_seats", "max_seats", "next_plan"],
-		order_by="price_per_seat asc, name asc",
+		fields=["name", "plan_title", "price_inr", "price_usd", "min_seats", "max_seats", "next_plan"],
+		order_by="COALESCE(price_inr, price_usd) asc, name asc",
 	)
 
 
@@ -131,7 +153,8 @@ def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any
 			"plan_type",
 			"enabled",
 			"billable_seats",
-			"price_per_seat",
+			"price_inr",
+			"price_usd",
 			"total_amount",
 			"seats_last_updated",
 		],
@@ -177,21 +200,28 @@ def get_seat_pricing_preview(plan: str, seats: int = 1) -> dict[str, Any]:
 	Used by frontend UI for real-time cost estimation.
 	"""
 	plan_doc = frappe.get_cached_doc("Site Plan", plan)
+	price_inr = flt(getattr(plan_doc, "price_inr", 0) or 0, 2)
+	price_usd = flt(getattr(plan_doc, "price_usd", 0) or 0, 2)
+	selected_price = price_usd or price_inr
 	if not is_seat_based_plan(plan_doc):
 		return {
 			"plan": plan_doc.name,
 			"plan_title": getattr(plan_doc, "plan_title", None) or plan_doc.name,
 			"billable_seats": cint(seats),
-			"price_per_seat": get_plan_price_per_seat(plan_doc),
-			"total_amount": flt(get_plan_price_per_seat(plan_doc) * cint(seats), 2),
+			"price_inr": price_inr,
+			"price_usd": price_usd,
+			"selected_price": selected_price,
+			"total_amount": flt(selected_price * cint(seats), 2),
 		}
 
 	return {
 		"plan": plan_doc.name,
 		"plan_title": getattr(plan_doc, "plan_title", None) or plan_doc.name,
 		"billable_seats": cint(seats),
-		"price_per_seat": get_plan_price_per_seat(plan_doc),
-		"total_amount": flt(get_plan_price_per_seat(plan_doc) * cint(seats), 2),
+		"price_inr": price_inr,
+		"price_usd": price_usd,
+		"selected_price": selected_price,
+		"total_amount": flt(selected_price * cint(seats), 2),
 		"min_seats": cint(getattr(plan_doc, "min_seats", 0) or 1),
 		"max_seats": cint(getattr(plan_doc, "max_seats", 0) or 0),
 		"next_plan": getattr(plan_doc, "next_plan", None),
@@ -797,16 +827,20 @@ def get_subscription_seat_context(subscription: str | dict[str, Any]) -> dict[st
 		subscription_doc = frappe.get_cached_doc("Subscription", subscription).as_dict()
 
 	plan = frappe.get_cached_doc(subscription_doc["plan_type"], subscription_doc["plan"])
-	price_per_seat = flt(
-		subscription_doc.get("price_per_seat") or get_plan_price_per_seat(plan), 2
-	)
+	team_currency = get_team_currency(subscription_doc.get("team"))
+	price_inr = flt(subscription_doc.get("price_inr") or getattr(plan, "price_inr", 0) or 0, 2)
+	price_usd = flt(subscription_doc.get("price_usd") or getattr(plan, "price_usd", 0) or 0, 2)
+	selected_price = get_plan_price_for_currency(plan, team_currency)
 	billable_seats = cint(subscription_doc.get("billable_seats") or 0)
-	total_amount = flt(price_per_seat * billable_seats, 2)
+	total_amount = flt(selected_price * billable_seats, 2)
 
 	return {
 		"plan": plan,
 		"billable_seats": billable_seats,
-		"price_per_seat": price_per_seat,
+		"team_currency": team_currency,
+		"price_inr": price_inr,
+		"price_usd": price_usd,
+		"selected_price": selected_price,
 		"total_amount": total_amount,
 	}
 
@@ -826,13 +860,20 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 		subscription_doc = frappe.get_cached_doc("Subscription", subscription_name).as_dict()
 
 	plan = frappe.get_cached_doc(subscription_doc["plan_type"], subscription_doc["plan"])
+	team_currency = get_team_currency(subscription_doc.get("team"))
 	if not is_seat_based_plan(plan):
+		price_inr = flt(getattr(plan, "price_inr", 0) or 0, 2)
+		price_usd = flt(getattr(plan, "price_usd", 0) or 0, 2)
+		selected_price = get_plan_price_for_currency(plan, team_currency)
 		return {
 			"subscription": subscription_name,
 			"billable_seats": cint(new_seats),
 			"plan": plan.name,
-			"price_per_seat": get_plan_price_per_seat(plan),
-			"total_amount": flt(get_plan_price_per_seat(plan) * cint(new_seats), 2),
+			"team_currency": team_currency,
+			"price_inr": price_inr,
+			"price_usd": price_usd,
+			"selected_price": selected_price,
+			"total_amount": flt(selected_price * cint(new_seats), 2),
 		}
 
 	new_seats = cint(new_seats)
@@ -858,13 +899,18 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 			)
 		)
 
-	price_per_seat = flt(subscription_doc.get("price_per_seat") or get_plan_price_per_seat(plan), 2)
+	price_inr = flt(subscription_doc.get("price_inr") or getattr(plan, "price_inr", 0) or 0, 2)
+	price_usd = flt(subscription_doc.get("price_usd") or getattr(plan, "price_usd", 0) or 0, 2)
+	selected_price = get_plan_price_for_currency(plan, team_currency)
 	return {
 		"subscription": subscription_name,
 		"billable_seats": new_seats,
 		"plan": plan.name,
-		"price_per_seat": price_per_seat,
-		"total_amount": flt(price_per_seat * new_seats, 2),
+		"team_currency": team_currency,
+		"price_inr": price_inr,
+		"price_usd": price_usd,
+		"selected_price": selected_price,
+		"total_amount": flt(selected_price * new_seats, 2),
 		"active_user_count": active_user_count,
 	}
 
@@ -875,6 +921,7 @@ def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any
 	Used during initial signup or checkout flows where a subscription doesn't exist yet.
 	"""
 	plan_doc = frappe.get_cached_doc("Site Plan", plan) if isinstance(plan, str) else plan
+	team_currency = get_team_currency(frappe.get_cached_doc("Site", site).team if site else None)
 	new_seats = cint(new_seats)
 	min_seats = cint(getattr(plan_doc, "min_seats", 0) or 1)
 	if new_seats < min_seats:
@@ -898,12 +945,17 @@ def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any
 				)
 			)
 
-	price_per_seat = get_plan_price_per_seat(plan_doc)
+	price_inr = flt(getattr(plan_doc, "price_inr", 0) or 0, 2)
+	price_usd = flt(getattr(plan_doc, "price_usd", 0) or 0, 2)
+	selected_price = get_plan_price_for_currency(plan_doc, team_currency)
 	return {
 		"plan": plan_doc.name,
 		"billable_seats": new_seats,
-		"price_per_seat": price_per_seat,
-		"total_amount": flt(price_per_seat * new_seats, 2),
+		"team_currency": team_currency,
+		"price_inr": price_inr,
+		"price_usd": price_usd,
+		"selected_price": selected_price,
+		"total_amount": flt(selected_price * new_seats, 2),
 		"active_user_count": active_user_count,
 	}
 
@@ -1114,12 +1166,16 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 
 	plan_doc = frappe.get_cached_doc("Site Plan", plan)
 	old_seats = cint(getattr(subscription_doc, "billable_seats", 0) or 0)
+	team_currency = get_team_currency(subscription_doc.team)
+	selected_price = get_plan_price_for_currency(plan_doc, team_currency)
 	subscription_doc.flags.skip_seat_change_log = True
 	subscription_doc.plan_type = "Site Plan"
 	subscription_doc.plan = plan_doc.name
 	subscription_doc.billable_seats = cint(validation["billable_seats"])
-	subscription_doc.price_per_seat = flt(validation["price_per_seat"], 2)
-	subscription_doc.total_amount = flt(validation["total_amount"], 2)
+	subscription_doc.price_inr = flt(validation.get("price_inr") or getattr(plan_doc, "price_inr", 0) or 0, 2)
+	subscription_doc.price_usd = flt(validation.get("price_usd") or getattr(plan_doc, "price_usd", 0) or 0, 2)
+	subscription_doc.price_per_seat = selected_price
+	subscription_doc.total_amount = flt(selected_price * subscription_doc.billable_seats, 2)
 	subscription_doc.seats_last_updated = now_datetime()
 	subscription_doc.enabled = 1
 	subscription_doc.save(ignore_permissions=True)
@@ -1140,7 +1196,10 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 		"plan": plan_doc.name,
 		"plan_title": getattr(plan_doc, "plan_title", None) or plan_doc.name,
 		"billable_seats": subscription_doc.billable_seats,
-		"price_per_seat": subscription_doc.price_per_seat,
+		"team_currency": team_currency,
+		"price_inr": subscription_doc.price_inr,
+		"price_usd": subscription_doc.price_usd,
+		"selected_price": subscription_doc.price_per_seat,
 		"total_amount": subscription_doc.total_amount,
 		"message": _(
 			"Your seat count has been updated to {0}. Billing will reflect this change from today's daily update at 6 PM."
@@ -1151,9 +1210,10 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	"""Internal helper to insert a 'Usage Record' document into the database."""
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
-	price_per_seat = flt(subscription.price_per_seat or get_plan_price_per_seat(plan), 2)
+	team_currency = get_team_currency(subscription.team)
+	selected_price = get_plan_price_for_currency(plan, team_currency)
 	billable_seats = cint(subscription.billable_seats or 0)
-	seat_amount = flt(price_per_seat * billable_seats, 2)
+	seat_amount = flt(selected_price * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
 	seat_change_log = get_seat_change_log_for_reference(subscription.name, reference_at=date if backfill else snapshot_taken_at)
 	remark = get_seat_usage_record_remark(
@@ -1172,7 +1232,7 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 			"plan_type": subscription.plan_type,
 			"plan": subscription.plan,
 			"amount": seat_amount,
-			"currency": frappe.get_cached_value("Team", subscription.team, "currency") or "INR",
+			"currency": team_currency,
 			"date": date,
 			"time": snapshot_taken_at.time().strftime("%H:%M:%S"),
 			"subscription": subscription.name,
