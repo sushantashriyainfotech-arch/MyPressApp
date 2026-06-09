@@ -90,6 +90,7 @@ class Subscription(PressSubscription):
 	def _clear_seat_billing_fields(self, plan=None) -> None:
 		"""Reset seat-billing fields when the subscription is no longer seat-based."""
 		self.billable_seats = 1
+		self.currency = get_team_currency(getattr(self, "team", None))
 		self.price_inr = 0
 		self.price_usd = 0
 		self.price_per_seat = 0
@@ -175,6 +176,7 @@ class Subscription(PressSubscription):
 		self.billable_seats = self._get_effective_billable_seats(plan)
 		team_currency, price_inr, price_usd, selected_price = self._get_currency_prices(plan)
 
+		self.currency = team_currency
 		self.price_inr = price_inr
 		self.price_usd = price_usd
 		self.price_per_seat = selected_price
@@ -398,6 +400,7 @@ class Subscription(PressSubscription):
 		self.flags.skip_seat_change_log = True # Prevent duplicate logging (one here, one in on_update)
 		old_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		self.billable_seats = cint(result["billable_seats"])
+		self.currency = result.get("team_currency") or get_team_currency(getattr(self, "team", None))
 		self.price_inr = flt(result.get("price_inr") or 0, 2)
 		self.price_usd = flt(result.get("price_usd") or 0, 2)
 		self.price_per_seat = flt(result.get("selected_price") or result.get("price_per_seat") or 0, 2)

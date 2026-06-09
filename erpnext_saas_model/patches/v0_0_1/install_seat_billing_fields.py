@@ -125,6 +125,20 @@ def ensure_site_fields():
 def ensure_subscription_fields():
 	_ensure_custom_field(
 		"Subscription",
+		"currency",
+		{
+			"label": "Currency",
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"options": "Currency",
+			"fetch_from": "team.currency",
+			"fetch_if_empty": 1,
+			"depends_on": "eval:doc.plan_type == 'Site Plan'",
+			"insert_after": "billable_seats",
+		},
+	)
+	_ensure_custom_field(
+		"Subscription",
 		"billable_seats",
 		{
 			"label": "Billable Seats",
@@ -172,7 +186,7 @@ def ensure_subscription_fields():
 			"label": "Total Amount",
 			"fieldname": "total_amount",
 			"fieldtype": "Currency",
-			"options": "INR",
+			"options": "currency",
 			"depends_on": "eval:doc.plan_type == 'Site Plan'",
 			"insert_after": "price_usd",
 		},
@@ -300,6 +314,7 @@ def ensure_existing_seat_prices_are_migrated():
 		"""
 		UPDATE `tabSubscription`
 		SET
+			`currency` = COALESCE(NULLIF(`currency`, ''), (SELECT `currency` FROM `tabTeam` WHERE `tabTeam`.`name` = `tabSubscription`.`team`)),
 			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
 			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
 		WHERE IFNULL(`plan_type`, '') = 'Site Plan'
