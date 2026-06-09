@@ -400,8 +400,15 @@
 		const maxSeats = Number(plan.max_seats || 0);
 		const selectedPrice = getPlanSeatPrice(plan);
 		const total = Number(state.billableSeats || 0) * Number(selectedPrice || 0);
+		const currentSubscriptionAmount = Number(
+			state.activeSubscriptionContext?.total_amount ||
+			state.activeSubscriptionContext?.current?.total_amount ||
+			state.activeSubscriptionContext?.amount ||
+			state.activeSubscriptionContext?.current?.amount ||
+			0,
+		);
 		const currentSubscriptionText = state.activeSubscriptionContext
-			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount}`
+			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount} · Total: ${formatCurrency(currentSubscriptionAmount)}`
 			: `Defaulting to plan minimum of ${initialSeats}`;
 
 		const seatRangeText = maxSeats ? `Min ${minSeats} seats · Up to ${maxSeats} seats` : `Min ${minSeats} seats`;
@@ -414,7 +421,7 @@
 		state.panel.innerHTML = `
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
+					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title || plan.name}</div>
 					<div class="text-sm font-medium text-ink-gray-9">Configure Seats</div>
 					<div class="text-xs text-ink-gray-6" data-role="seat-range"></div>
 					<div class="text-xs text-ink-gray-6 mt-1">${currentSubscriptionText}</div>
@@ -846,7 +853,7 @@
 	}
 
 		const cloned = parsed;
-		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceUsd)) return body;
+		if (!updateSeatBillingPayloadObject(cloned, seats, effectivePriceInr, effectivePriceUsd)) return body;
 		return cloned;
 	}
 

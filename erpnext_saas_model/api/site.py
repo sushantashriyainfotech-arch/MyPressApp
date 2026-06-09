@@ -49,6 +49,7 @@ def get_site_plans():
 
 	for plan in plans:
 		plan_doc = frappe.get_cached_doc("Site Plan", plan["name"])
+		plan["plan_title"] = getattr(plan_doc, "plan_title", None) or plan.get("plan_title") or plan["name"]
 		if not is_seat_based_plan(plan_doc):
 			continue
 
@@ -111,6 +112,8 @@ def get_current_subscription_context(site=None, subscription=None):
 		subscription_doc.document_name if subscription_doc.document_type == "Site" else None
 	)
 	current["active_user_count"] = get_site_user_active_count(current["site"]) if current["site"] else 0
+	if current.get("total_amount") is not None:
+		current["amount"] = current["total_amount"]
 	return {"subscription": subscription_doc.name, "current": current}
 
 
