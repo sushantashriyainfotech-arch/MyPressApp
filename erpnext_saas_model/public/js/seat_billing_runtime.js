@@ -6,6 +6,9 @@
 	console.log('[Seat Billing] Script initialized');
 	document.title = '[SB] ' + document.title;
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// State & constants
+	// ─────────────────────────────────────────────────────────────────────────────
 	const state = {
 		plans: [],
 		selectedPlan: null,
@@ -17,20 +20,22 @@
 		planGridDialog: null,
 		planGridDialogCloseBound: false,
 		step: 1, // 1: Plan selection, 2: Seat selection
-		currency: 'USD',
-		country: 'United States',
+		currency: null,
+		country: null,
 	};
 
 	const ROUTE_HINTS = ['/app/press/site/', '/overview', '/dashboard/sites/'];
-	const EXCLUDED_ROUTE_HINTS = ['/dashboard/create-site/*']; // Add routes here to stop the script from running
+	const EXCLUDED_ROUTE_HINTS = ['/dashboard/create-site/*'];
 	const MONTHLY_TEXT_RE = /\/day|\/mo|per day|per month/i;
-	const DEBUG = true; // Set to false in production
+	const DEBUG = true;
 
 	function log(...args) {
 		if (DEBUG) console.log('[Seat Billing]', ...args);
 	}
 
-	// ── Debounce helper ────────────────────────────────────────────────────────
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Generic utilities
+	// ─────────────────────────────────────────────────────────────────────────────
 	function debounce(fn, delay) {
 		let timer;
 		return function (...args) {
@@ -43,6 +48,26 @@
 		return String(value || '')
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '');
+	}
+
+	function parseMaybeJSON(value) {
+		if (value == null || value === '') return null;
+		if (typeof value === 'object') return value;
+		try {
+			return JSON.parse(value);
+		} catch (error) {
+			return null;
+		}
+	}
+
+	function parseMaybeJSONSafe(value) {
+		if (value == null || value === '') return null;
+		if (typeof value === 'object') return value;
+		try {
+			return JSON.parse(value);
+		} catch (error) {
+			return null;
+		}
 	}
 
 	function isVisibleElement(el) {
@@ -59,7 +84,6 @@
 		const path = window.location.pathname || '';
 		return EXCLUDED_ROUTE_HINTS.some((hint) => {
 			if (hint.includes('*')) {
-				// Convert wildcard * to regex .* and escape other special chars
 				const escaped = hint.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
 				const regex = new RegExp('^' + escaped + '$');
 				return regex.test(path);
@@ -69,7 +93,6 @@
 	}
 
 	function isRelevantRoute() {
-		// First gate: only activate on pages that look like seat-billing flows.
 		if (isExcludedRoute()) {
 			log('Route is excluded');
 			return false;
@@ -90,50 +113,12 @@
 		);
 	}
 
-	async function getCurrentTeamData() {
-		console.log(window);
-		try {
-			const currentTeam = localStorage.getItem('current_team') || '';
-			const url = currentTeam
-				? `/api/method/press.api.team.get_current_team_locale?team_name=${encodeURIComponent(currentTeam)}`
-				: '/api/method/press.api.team.get_current_team_locale';
-			const res = await fetch(url, {
-				credentials: 'same-origin',
-			});
-			const data = await res.json();
-
-			log('Fetched team data:', data?.message);
-			return data?.message;
-		} catch {
-			console.error('Failed to fetch team data');
-			return;
-		}
-	}
-
-	function getLocale() {
-		const LOCALE_MAP = {
-			'India': 'en-IN',
-			'United States': 'en-US',
-			'United Kingdom': 'en-GB',
-			'Germany': 'de-DE',
-			'France': 'fr-FR',
-			'Japan': 'ja-JP',
-			'Australia': 'en-AU',
-			'Canada': 'en-CA',
-		};
-
-		return LOCALE_MAP[state.country] || 'en-US';
-	}
-
-
 	function formatCurrency(value) {
 		const amount = Number(value || 0);
-
-		const currency = state.currency;
-		const locale = getLocale();
+		const currency = state.currency || 'USD';
+		const locale = currency === 'INR' ? 'en-IN' : 'en-US';
 
 		log('Formatting currency with locale:', locale, 'and currency:', currency);
-
 		log('Formatting currency:', amount, currency);
 
 		if (window.format_currency) {
@@ -147,6 +132,38 @@
 		}).format(amount);
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Team locale
+	// ─────────────────────────────────────────────────────────────────────────────
+	async function getCurrentTeamData() {
+		try {
+			const currentTeam = localStorage.getItem('current_team') || '';
+			const url = currentTeam
+				? `/api/method/press.api.team.get_current_team_locale?team_name=${encodeURIComponent(currentTeam)}`
+				: '/api/method/press.api.team.get_current_team_locale';
+			const res = await fetch(url, {
+				credentials: 'same-origin',
+			});
+			const data = await res.json();
+			log('Fetched team data:', data?.message);
+			return data?.message;
+		} catch {
+			console.error('Failed to fetch team data');
+			return;
+		}
+	}
+
+	async function loadLocale() {
+		if (state.country && state.currency) return;
+		const data = await getCurrentTeamData();
+		state.country = data?.country || state.country;
+		state.currency = data?.currency || state.currency;
+		log('Locale loaded:', { country: state.country, currency: state.currency });
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Plans & subscriptions
+	// ─────────────────────────────────────────────────────────────────────────────
 	function isSeatBased(plan) {
 		return plan && plan.billing_type === 'Seat Based';
 	}
@@ -154,7 +171,6 @@
 	function clampSeats(plan, seats) {
 		const minSeats = Number(plan?.min_seats || 1);
 		let nextSeats = Number(seats || minSeats || 1);
-
 		if (nextSeats < minSeats) nextSeats = minSeats;
 		return nextSeats;
 	}
@@ -174,10 +190,7 @@
 			state.activeSubscriptionContext?.current?.billable_seats ||
 			0,
 		);
-		return Math.max(
-			Number(plan?.min_seats || 1),
-			activeSubscriptionSeats,
-		);
+		return Math.max(Number(plan?.min_seats || 1), activeSubscriptionSeats);
 	}
 
 	function findPlanByName(planName) {
@@ -207,30 +220,50 @@
 	}
 
 	async function loadPlans() {
-		// Second gate: fetch plan data before we try to match the selected plan.
 		if (state.plans.length) return state.plans;
-
-		const response = await fetch(
-			'/api/method/press.api.site.get_site_plans',
-			{ credentials: 'same-origin' },
-		);
+		const response = await fetch('/api/method/press.api.site.get_site_plans', {
+			credentials: 'same-origin',
+		});
 		const data = await response.json();
 		state.plans = Array.isArray(data.message) ? data.message : [];
 		return state.plans;
 	}
 
-	async function loadLocale() {
-
-		if (state.country && state.currency) {
-			return;
+	async function loadCurrentSubscription() {
+		if (state.activeSubscriptionContext) {
+			log('Active subscription context already loaded', state.activeSubscriptionContext);
+			return state.activeSubscriptionContext;
 		}
 
-		const data = await getCurrentTeamData();
-		state.country = data?.country || state.country;
-		state.currency = data?.currency || state.currency;
-		log('Locale loaded:', { country: state.country, currency: state.currency });
+		const site = getCurrentManagedSite();
+		if (!site) {
+			log('No managed site found in boot data');
+			return null;
+		}
+
+		try {
+			const response = await fetch(
+				`/api/method/press.api.site.get_current_subscription_context?site=${encodeURIComponent(site)}`,
+				{ credentials: 'same-origin' },
+			);
+			const data = await response.json();
+			state.activeSubscription = data?.message?.subscription || null;
+			state.activeSubscriptionContext = data?.message?.current || null;
+			log('Loaded active subscription context:', {
+				site,
+				subscription: state.activeSubscription,
+				context: state.activeSubscriptionContext,
+			});
+			return state.activeSubscriptionContext;
+		} catch (error) {
+			log('Failed to load active subscription context', error);
+			return null;
+		}
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Plan grid discovery and rendering
+	// ─────────────────────────────────────────────────────────────────────────────
 	function getCurrentManagedSite() {
 		const path = window.location.pathname || '';
 		const match = path.match(/\/dashboard\/sites\/([^/]+)(?:\/|$)/);
@@ -259,36 +292,31 @@
 		return /\/dashboard\/sites\/[^/]+\/overview(?:\/|$)/.test(window.location.pathname || '');
 	}
 
-	async function loadCurrentSubscription() {
-		if (state.activeSubscriptionContext) {
-			log('Active subscription context already loaded', state.activeSubscriptionContext);
-			return state.activeSubscriptionContext;
+	function getVisibleModalContainers() {
+		return Array.from(
+			document.querySelectorAll('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"], .modal.show, .modal[style*="display: block"], .modal-dialog, .modal-content'),
+		).filter(isVisibleElement);
+	}
 
+	function findGridInContainer(container) {
+		const divs = Array.from(container.querySelectorAll('div'));
+		for (const el of divs) {
+			const buttons = Array.from(el.children).filter((child) => child.tagName === 'BUTTON');
+			if (buttons.length < 2) continue;
+			if (!buttons.some((button) => MONTHLY_TEXT_RE.test(button.textContent || ''))) continue;
+			return el;
 		}
-		const site = getCurrentManagedSite();
-		if (!site) {
-			log('No managed site found in boot data');
-			return null;
-		};
+		return null;
+	}
 
-		try {
-			const response = await fetch(
-				`/api/method/press.api.site.get_current_subscription_context?site=${encodeURIComponent(site)}`,
-				{ credentials: 'same-origin' },
-			);
-			const data = await response.json();
-			state.activeSubscription = data?.message?.subscription || null;
-			state.activeSubscriptionContext = data?.message?.current || null;
-			log('Loaded active subscription context:', {
-				site,
-				subscription: state.activeSubscription,
-				context: state.activeSubscriptionContext,
-			});
-			return state.activeSubscriptionContext;
-		} catch (error) {
-			log('Failed to load active subscription context', error);
-			return null;
+	function findPlanGrid() {
+		const dialogs = getVisibleModalContainers();
+		for (const dialog of dialogs) {
+			if (!isVisibleElement(dialog)) continue;
+			const grid = findGridInContainer(dialog);
+			if (grid) return grid;
 		}
+		return findGridInContainer(document.body);
 	}
 
 	function getSelectedPlanFromGrid(grid) {
@@ -319,58 +347,11 @@
 		return Number(plan?.price_per_seat || 0) * Number(seats || 0);
 	}
 
-	function parseMaybeJSON(value) {
-		if (value == null || value === '') return null;
-		if (typeof value === 'object') return value;
-
-		try {
-			return JSON.parse(value);
-		} catch (error) {
-			return null;
-		}
-	}
-
-	function updateSeatBillingPayloadObject(payload, seats, effectivePriceUsd) {
-		if (!payload || typeof payload !== 'object') return false;
-
-		let mutated = false;
-		if (payload.site && typeof payload.site === 'object') {
-			payload.site.billable_seats = seats;
-			payload.site.price_usd = effectivePriceUsd;
-			mutated = true;
-		}
-		if (payload.doc && payload.doc.doctype === 'Site' && typeof payload.doc === 'object') {
-			payload.doc.billable_seats = seats;
-			payload.doc.price_usd = effectivePriceUsd;
-			mutated = true;
-		}
-		if (!payload.args || typeof payload.args !== 'object') {
-			payload.args = {};
-		}
-		payload.args.billable_seats = seats;
-		payload.args.price_usd = effectivePriceUsd;
-		mutated = true;
-
-		if (payload.plan && !payload.billable_seats) {
-			payload.billable_seats = seats;
-			mutated = true;
-		}
-		if (payload.subscription_plan && !payload.billable_seats) {
-			payload.billable_seats = seats;
-			mutated = true;
-		}
-
-		return mutated;
-	}
-
 	function renderPanel() {
-		// Rendering always flows through one of two steps:
-		// step 1 = plan selected, step 2 = seat configuration.
 		if (!state.planGrid) return;
 		if (!state.panel) {
 			state.panel = document.createElement('div');
-			state.panel.className =
-				'erp-seat-billing-panel mt-4 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4';
+			state.panel.className = 'erp-seat-billing-panel mt-4 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4';
 			state.panel.dataset.erpSeatBillingPanel = '1';
 		}
 
@@ -382,8 +363,6 @@
 	}
 
 	function renderStep1() {
-		// Step 1 keeps the plan grid visible and hides the seat editor panel.
-		// This is the default state for non-seat-based plans.
 		if (!state.panel) return;
 		state.planGrid.style.display = '';
 		state.panel.style.display = 'none';
@@ -393,15 +372,97 @@
 		}
 	}
 
-	function getPlanGridDialog(grid = state.planGrid) {
-		if (!grid) return null;
-		return (
-			grid.closest('[data-dismissable-layer][role="dialog"]') ||
-			grid.closest('[role="dialog"][data-dismissable-layer]') ||
-			grid.closest('[role="dialog"]') ||
-			grid.closest('[data-dismissable-layer]') ||
-			null
+	function renderStep2() {
+		if (!state.panel) return;
+
+		state.planGrid.style.display = '';
+		state.panel.style.display = '';
+
+		const plan = state.selectedPlan;
+		const activeUserCount = getActiveUserCount();
+		const activeSubscriptionSeats = Number(
+			state.activeSubscriptionContext?.billable_seats ||
+			state.activeSubscriptionContext?.subscription?.billable_seats ||
+			state.activeSubscriptionContext?.current?.billable_seats ||
+			0,
 		);
+		const initialSeats = getInitialSeatCount(plan);
+		state.billableSeats = clampSeats(plan, state.billableSeats || initialSeats);
+
+		const minSeats = Number(plan.min_seats || 1);
+		const maxSeats = Number(plan.max_seats || 0);
+		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
+		const currentSubscriptionText = state.activeSubscriptionContext
+			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount}`
+			: `Defaulting to plan minimum of ${initialSeats}`;
+
+		const seatRangeText = maxSeats ? `Min ${minSeats} seats · Up to ${maxSeats} seats` : `Min ${minSeats} seats`;
+		const warningText = shouldShowWarning(plan, state.billableSeats)
+			? plan.next_plan
+				? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
+				: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
+			: '';
+
+		state.panel.innerHTML = `
+			<div class="flex items-start justify-between gap-4">
+				<div>
+					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
+					<div class="text-sm font-medium text-ink-gray-9">Configure Seats</div>
+					<div class="text-xs text-ink-gray-6" data-role="seat-range"></div>
+					<div class="text-xs text-ink-gray-6 mt-1">${currentSubscriptionText}</div>
+				</div>
+				<div class="text-right">
+					<div class="text-xs text-ink-gray-6">Monthly total</div>
+					<div class="text-xl font-bold text-ink-primary" data-role="seat-total"></div>
+				</div>
+			</div>
+			<div class="mt-6 grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
+				<label class="text-sm font-medium text-ink-gray-8">How many seats?</label>
+				<div class="flex items-center gap-2">
+					<input
+						type="number"
+						min="${minSeats}"
+						class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
+						data-role="seat-input"
+					/>
+					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(plan.price_per_seat)} per seat</span>
+				</div>
+			</div>
+			<div class="mt-4 text-sm text-ink-gray-6 bg-surface-gray-2 p-3 rounded border border-outline-gray-2">
+				<strong>Billing details:</strong> Your base plan cost will be replaced by the seat-based total shown above.
+			</div>
+			<div class="mt-2 text-xs text-red-600" data-role="seat-warning"></div>
+		`;
+
+		state.panel.querySelector('[data-role="seat-range"]').textContent = seatRangeText;
+		state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(total);
+
+		const warningEl = state.panel.querySelector('[data-role="seat-warning"]');
+		warningEl.textContent = warningText;
+		warningEl.style.display = warningText ? '' : 'none';
+
+		const input = state.panel.querySelector('[data-role="seat-input"]');
+		input.min = String(minSeats);
+		input.value = String(state.billableSeats || minSeats);
+		input.oninput = () => {
+			const floorSeats = minSeats;
+			state.billableSeats = Math.max(Number(input.value || 0), floorSeats);
+			input.value = String(state.billableSeats);
+			const newTotal = Number(state.billableSeats) * Number(plan.price_per_seat || 0);
+			state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(newTotal);
+			const newWarning = shouldShowWarning(plan, state.billableSeats)
+				? plan.next_plan
+					? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
+					: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
+				: '';
+			const w = state.panel.querySelector('[data-role="seat-warning"]');
+			w.textContent = newWarning;
+			w.style.display = newWarning ? '' : 'none';
+		};
+
+		if (!state.panel.isConnected) {
+			state.planGrid.insertAdjacentElement('afterend', state.panel);
+		}
 	}
 
 	function resetPanel() {
@@ -427,23 +488,13 @@
 		}
 	}
 
-	function isDialogCloseButton(button) {
-		if (!button || button.tagName !== 'BUTTON') return false;
-		if (button.dataset?.role === 'seat-billing-ignore-close') return false;
-		return Boolean(button.querySelector('svg.lucide-x, svg[class*="lucide-x"], svg path[d="M18 6 6 18"], svg path[d="m6 6 12 12"]'));
-	}
-
 	function bindPlanGridDialog() {
 		if (state.planGridDialogCloseBound) return;
 		state.planGridDialogCloseBound = true;
 
 		const clearOnClose = (dialog) => {
-			window.setTimeout(() => {
-				clearPlanGridAlerts(dialog);
-			}, 0);
-			window.setTimeout(() => {
-				clearPlanGridAlerts(dialog);
-			}, 250);
+			window.setTimeout(() => clearPlanGridAlerts(dialog), 0);
+			window.setTimeout(() => clearPlanGridAlerts(dialog), 250);
 		};
 
 		document.addEventListener(
@@ -451,7 +502,6 @@
 			(event) => {
 				const button = event.target?.closest?.('button');
 				if (!isDialogCloseButton(button)) return;
-
 				const dialog = button.closest('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"]');
 				clearOnClose(dialog || state.planGridDialog || getPlanGridDialog());
 			},
@@ -459,117 +509,24 @@
 		);
 	}
 
-	function getVisibleModalContainers() {
-		return Array.from(
-			document.querySelectorAll('[data-dismissable-layer][role="dialog"], [role="dialog"][data-dismissable-layer], [role="dialog"], .modal.show, .modal[style*="display: block"], .modal-dialog, .modal-content'),
-		).filter(isVisibleElement);
-	}
-
-	function renderStep2() {
-		// Step 2 shows the seat editor while keeping the plan grid visible.
-		if (!state.panel) return;
-
-		state.planGrid.style.display = '';
-		state.panel.style.display = '';
-
-		const plan = state.selectedPlan;
-		const activeUserCount = getActiveUserCount();
-		const activeSubscriptionSeats = Number(
-			state.activeSubscriptionContext?.billable_seats ||
-			state.activeSubscriptionContext?.subscription?.billable_seats ||
-			state.activeSubscriptionContext?.current?.billable_seats ||
-			0,
+	function getPlanGridDialog(grid = state.planGrid) {
+		if (!grid) return null;
+		return (
+			grid.closest('[data-dismissable-layer][role="dialog"]') ||
+			grid.closest('[role="dialog"][data-dismissable-layer]') ||
+			grid.closest('[role="dialog"]') ||
+			grid.closest('[data-dismissable-layer]') ||
+			null
 		);
-		const initialSeats = getInitialSeatCount(plan);
-		state.billableSeats = clampSeats(plan, state.billableSeats || initialSeats);
-
-		const minSeats = Number(plan.min_seats || 1);
-		const maxSeats = Number(plan.max_seats || 0);
-		const total = Number(state.billableSeats || 0) * Number(plan.price_per_seat || 0);
-		const currentSubscriptionText = state.activeSubscriptionContext
-			? `Current subscription seats: ${activeSubscriptionSeats || initialSeats} · Active users: ${activeUserCount}`
-			: `Defaulting to plan minimum of ${initialSeats}`;
-
-		const seatRangeText = maxSeats
-			? `Min ${minSeats} seats · Up to ${maxSeats} seats`
-			: `Min ${minSeats} seats`;
-		const warningText = shouldShowWarning(plan, state.billableSeats)
-			? plan.next_plan
-				? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
-				: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
-			: '';
-
-		state.panel.innerHTML = `
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<div class="text-base font-semibold text-ink-gray-9">${plan.plan_title}</div>
-					<div class="text-sm font-medium text-ink-gray-9">Configure Seats</div>
-					<div class="text-xs text-ink-gray-6" data-role="seat-range"></div>
-					<div class="text-xs text-ink-gray-6 mt-1">${currentSubscriptionText}</div>
-				</div>
-				<div class="text-right">
-					<div class="text-xs text-ink-gray-6">Monthly total</div>
-					<div class="text-xl font-bold text-ink-primary" data-role="seat-total"></div>
-				</div>
-			</div>
-				<div class="mt-6 grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
-					<label class="text-sm font-medium text-ink-gray-8">How many seats?</label>
-					<div class="flex items-center gap-2">
-						<input
-							type="number"
-							min="${minSeats}"
-							class="h-10 w-24 rounded border border-outline-gray-3 bg-surface-white px-3 text-base text-ink-gray-9 focus:border-outline-gray-4 focus:ring-0"
-							data-role="seat-input"
-					/>
-					<span class="text-sm text-ink-gray-6">@ ${formatCurrency(plan.price_per_seat)} per seat</span>
-				</div>
-			</div>
-			<div class="mt-4 text-sm text-ink-gray-6 bg-surface-gray-2 p-3 rounded border border-outline-gray-2">
-				<strong>Billing details:</strong> Your base plan cost will be replaced by the seat-based total shown above.
-			</div>
-			<div class="mt-2 text-xs text-red-600" data-role="seat-warning"></div>
-		`;
-
-		// state.panel.querySelector('[data-role="back-to-plans"]').onclick = () => {
-		// 	state.step = 1;
-		// 	renderPanel();
-		// };
-
-		state.panel.querySelector('[data-role="seat-range"]').textContent = seatRangeText;
-		state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(total);
-
-		const warningEl = state.panel.querySelector('[data-role="seat-warning"]');
-		warningEl.textContent = warningText;
-		warningEl.style.display = warningText ? '' : 'none';
-
-		const input = state.panel.querySelector('[data-role="seat-input"]');
-		input.min = String(minSeats);
-		input.value = String(state.billableSeats || minSeats);
-		input.oninput = () => {
-			const floorSeats = minSeats;
-			state.billableSeats = Math.max(Number(input.value || 0), floorSeats);
-			input.value = String(state.billableSeats);
-			// Update totals in-place without full re-render to avoid loop
-			const newTotal = Number(state.billableSeats) * Number(plan.price_per_seat || 0);
-			state.panel.querySelector('[data-role="seat-total"]').textContent = formatCurrency(newTotal);
-			const newWarning = shouldShowWarning(plan, state.billableSeats)
-				? plan.next_plan
-					? `This plan supports up to ${maxSeats} seats. Please upgrade to ${plan.next_plan} to continue.`
-					: `This plan supports up to ${maxSeats} seats. Please upgrade to a higher plan to continue.`
-				: '';
-			const w = state.panel.querySelector('[data-role="seat-warning"]');
-			w.textContent = newWarning;
-			w.style.display = newWarning ? '' : 'none';
-		};
-
-		if (!state.panel.isConnected) {
-			state.planGrid.insertAdjacentElement('afterend', state.panel);
-		}
 	}
 
-	// ── Fixed: only re-render when plan actually changes ──────────────────────
+	function isDialogCloseButton(button) {
+		if (!button || button.tagName !== 'BUTTON') return false;
+		if (button.dataset?.role === 'seat-billing-ignore-close') return false;
+		return Boolean(button.querySelector('svg.lucide-x, svg[class*="lucide-x"], svg path[d="M18 6 6 18"], svg path[d="m6 6 12 12"]'));
+	}
+
 	function refreshSelection() {
-		// Re-read the selected plan from the grid after clicks, navigation, or DOM changes.
 		if (!state.planGrid) return;
 		log('Refreshing selection...');
 		const selected = getSelectedPlanFromGrid(state.planGrid);
@@ -582,7 +539,7 @@
 				state.billableSeats = clampSeats(selected, initialSeats);
 				state.step = isSeatBased(selected) ? 2 : 1;
 				log('Plan changed to:', selected.name);
-				renderPanel(); // Only render on actual plan change
+				renderPanel();
 			}
 			if (state.selectedPlan && isSeatBased(state.selectedPlan) && state.step !== 2) {
 				state.step = 2;
@@ -595,40 +552,12 @@
 				state.step = 1;
 				resetPanel();
 				clearPlanGridAlerts();
-				renderPanel(); // Only render on actual change
+				renderPanel();
 			}
 		}
-	}
-
-	function findPlanGrid() {
-		// Search modals first because the plan picker usually lives inside a bootstrap modal.
-		const dialogs = getVisibleModalContainers();
-		for (const dialog of dialogs) {
-			if (!isVisibleElement(dialog)) continue;
-			const grid = findGridInContainer(dialog);
-			if (grid) return grid;
-		}
-		return findGridInContainer(document.body);
-	}
-
-	function findGridInContainer(container) {
-		const divs = Array.from(container.querySelectorAll('div'));
-		for (const el of divs) {
-			const buttons = Array.from(el.children).filter(
-				(child) => child.tagName === 'BUTTON',
-			);
-			if (buttons.length < 2) continue;
-			if (!buttons.some((button) => MONTHLY_TEXT_RE.test(button.textContent || ''))) {
-				continue;
-			}
-			return el;
-		}
-		return null;
 	}
 
 	function bindPlanGrid(grid) {
-		// A single capturing click listener is enough; it schedules a selection refresh
-		// after the UI has updated its active-button state.
 		if (!grid || grid.dataset.erpSeatBillingBound === '1') return;
 		grid.dataset.erpSeatBillingBound = '1';
 		log('Binding to plan grid');
@@ -643,14 +572,11 @@
 	}
 
 	async function maybeMount() {
-		// Mounting is idempotent: if the page is relevant and a plan grid exists,
-		// attach to it and sync the current selection.
 		if (!isRelevantRoute()) return;
 
 		try {
 			await Promise.all([loadPlans(), loadLocale()]);
 		} catch (error) {
-			// If plan data fails to load, keep the runtime no-op rather than breaking Desk.
 			return;
 		}
 
@@ -658,8 +584,6 @@
 			loadCurrentSubscription();
 		}
 
-		// Lazy Patching: only arm the network stack interception once we enter
-		// a relevant seat-billing flow.
 		patchFetch();
 		patchXhr();
 
@@ -695,12 +619,45 @@
 			bindPlanGrid(grid);
 			refreshSelection();
 		}
-		// Removed: periodic refreshSelection() call here — was causing the loop
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Network interception
+	// ─────────────────────────────────────────────────────────────────────────────
+	function updateSeatBillingPayloadObject(payload, seats, effectivePriceUsd) {
+		if (!payload || typeof payload !== 'object') return false;
+
+		let mutated = false;
+		if (payload.site && typeof payload.site === 'object') {
+			payload.site.billable_seats = seats;
+			payload.site.price_usd = effectivePriceUsd;
+			mutated = true;
+		}
+		if (payload.doc && payload.doc.doctype === 'Site' && typeof payload.doc === 'object') {
+			payload.doc.billable_seats = seats;
+			payload.doc.price_usd = effectivePriceUsd;
+			mutated = true;
+		}
+		if (!payload.args || typeof payload.args !== 'object') {
+			payload.args = {};
+		}
+		payload.args.billable_seats = seats;
+		payload.args.price_usd = effectivePriceUsd;
+		mutated = true;
+
+		if (payload.plan && !payload.billable_seats) {
+			payload.billable_seats = seats;
+			mutated = true;
+		}
+		if (payload.subscription_plan && !payload.billable_seats) {
+			payload.billable_seats = seats;
+			mutated = true;
+		}
+
+		return mutated;
 	}
 
 	function updateRequestBody(url, body) {
-		// Network hook: when the app submits a seat-based plan change, inject
-		// the current billable seat count into the request payload.
 		if (!body) return body;
 
 		const bodyIsString = typeof body === 'string';
@@ -718,14 +675,10 @@
 			return body;
 		}
 
-		const nestedArgs = parseMaybeJSON(
-			bodyIsSearchParams ? parsed.get('args') : parsed?.args,
-		);
-		const nestedDocs = parseMaybeJSON(
-			bodyIsSearchParams ? parsed.get('docs') : parsed?.docs,
-		);
+		const nestedArgs = parseMaybeJSON(bodyIsSearchParams ? parsed.get('args') : parsed?.args);
+		const nestedDocs = parseMaybeJSON(bodyIsSearchParams ? parsed.get('docs') : parsed?.docs);
 
-		let planName =
+		const planName =
 			parsed?.site?.plan ||
 			parsed?.plan ||
 			parsed?.doc?.subscription_plan ||
@@ -736,7 +689,6 @@
 			nestedDocs?.plan;
 		const plan = findPlanByName(planName);
 
-		// For non-seat-based plans, ensure we don't send stale seat billing data.
 		if (!isSeatBased(plan)) {
 			if (bodyIsSearchParams) {
 				parsed.delete('billable_seats');
@@ -797,7 +749,6 @@
 				}
 			}
 
-			// For literal objects, we should clone to avoid mutating the original reference
 			const cloned = JSON.parse(JSON.stringify(parsed));
 			delete cloned.billable_seats;
 			delete cloned.price_usd;
@@ -888,210 +839,89 @@
 		);
 	}
 
-	function parseMaybeJSONSafe(value) {
-		if (value == null || value === '') return null;
-		if (typeof value === 'object') return value;
-
-		try {
-			return JSON.parse(value);
-		} catch (error) {
-			return null;
-		}
-	}
-
-	function logRequestResponse(url, requestBody, responseData) {
-		const responseMessage = responseData?.message || null;
-		const responseDoc = Array.isArray(responseData?.docs) ? responseData.docs[0] : null;
-		const debugPayload = {
-			event: 'seat_billing.request_response',
-			url,
-			request_body: requestBody,
-			request_site: requestBody?.args?.name || requestBody?.name || requestBody?.dn || null,
-			request_plan: requestBody?.args?.plan || requestBody?.plan || requestBody?.doc?.plan || null,
-			request_billable_seats:
-				requestBody?.args?.billable_seats ||
-				requestBody?.billable_seats ||
-				requestBody?.doc?.billable_seats ||
-				null,
-			response_subscription: responseMessage?.subscription || responseDoc?.subscription || null,
-			response_site: responseMessage?.site || responseDoc?.name || null,
-			response_team: responseDoc?.team || null,
-			response_data: responseData,
-		};
-
-		console.log('[Seat Billing Debug]', debugPayload);
-
-		const method = requestBody?.method || requestBody?.cmd || responseData?.method || null;
-		const shouldRefresh =
-			!responseData?.exception &&
-			(method === 'set_plan' || method === 'change_plan' || (url || '').includes('set_plan') || (url || '').includes('change_plan'));
-
-		if (shouldRefresh) {
-			window.setTimeout(() => {
-				window.location.reload();
-			}, 250);
-		}
-	}
-
 	function patchFetch() {
-		// Patch fetch first so any later app requests pass through the seat injector.
-		if (window.__erpnextSeatBillingFetchPatched) return;
-		window.__erpnextSeatBillingFetchPatched = true;
-		const originalFetch = window.fetch.bind(window);
-		window.fetch = function (input, init) {
-			try {
-				if (isExcludedRoute()) return originalFetch(input, init);
+		if (window.__erpSeatBillingFetchPatched) return;
+		window.__erpSeatBillingFetchPatched = true;
 
-				const url =
-					typeof input === 'string'
-						? input
-						: input && input.url
-							? input.url
-							: '';
-				if (shouldLogRequest(url)) {
-					let parsedBody = null;
-					init = init || {};
-					init.body = updateRequestBody(url, init.body);
-					parsedBody = parseMaybeJSONSafe(init.body);
-					return originalFetch(input, init).then(async (response) => {
-						try {
-							const cloned = response.clone();
-							const data = await cloned.json();
-							logRequestResponse(url, parsedBody, data);
-						} catch (error) {
-							// Ignore non-JSON responses.
-						}
-						return response;
-					});
+		const originalFetch = window.fetch.bind(window);
+		window.fetch = async function (input, init = {}) {
+			try {
+				const url = typeof input === 'string' ? input : input?.url || '';
+				if (shouldLogRequest(url) && init?.body) {
+					init = { ...init, body: updateRequestBody(url, init.body) };
 				}
 			} catch (error) {
-				// Leave the request untouched if interception fails.
+				log('fetch patch error', error);
 			}
 			return originalFetch(input, init);
 		};
 	}
 
 	function patchXhr() {
-		// Patch XHR as well because the dashboard may use either transport.
-		if (window.__erpnextSeatBillingXhrPatched) return;
-		window.__erpnextSeatBillingXhrPatched = true;
+		if (window.__erpSeatBillingXhrPatched) return;
+		window.__erpSeatBillingXhrPatched = true;
 
 		const originalOpen = XMLHttpRequest.prototype.open;
 		const originalSend = XMLHttpRequest.prototype.send;
 
-		XMLHttpRequest.prototype.open = function (method, url) {
-			this.__erpnextSeatBillingUrl = url || '';
-			return originalOpen.apply(this, arguments);
+		XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+			this.__erpSeatBillingUrl = url;
+			return originalOpen.call(this, method, url, ...rest);
 		};
 
 		XMLHttpRequest.prototype.send = function (body) {
 			try {
-				if (isExcludedRoute()) return originalSend.call(this, body);
-
-				if (shouldLogRequest(this.__erpnextSeatBillingUrl)) {
-					const updatedBody = updateRequestBody(this.__erpnextSeatBillingUrl, body);
-					const parsedBody = parseMaybeJSONSafe(updatedBody);
-					this.addEventListener('load', () => {
-						try {
-							const data = parseMaybeJSONSafe(this.responseText);
-							logRequestResponse(this.__erpnextSeatBillingUrl, parsedBody, data);
-						} catch (error) {
-							// Ignore response parsing failures.
-						}
-					});
-					body = updatedBody;
+				if (shouldLogRequest(this.__erpSeatBillingUrl) && body) {
+					body = updateRequestBody(this.__erpSeatBillingUrl, body);
 				}
 			} catch (error) {
-				// Ignore and keep the original body.
+				log('xhr patch error', error);
 			}
 			return originalSend.call(this, body);
 		};
 	}
 
-	function interceptDialogButtons() {
-		// While step 1 is active, keep the primary plan action disabled until seats
-		// have been configured.
-		if (!isSeatBased(state.selectedPlan)) return;
-
-		const dialogs = Array.from(document.querySelectorAll('.frappe-dialog, [role="dialog"]'));
-		for (const dialog of dialogs) {
-			const buttons = Array.from(dialog.querySelectorAll('button'));
-			const primaryButton = buttons.find(b =>
-				b.textContent.includes('Select Plan') ||
-				b.textContent.includes('Change Plan') ||
-				b.textContent.includes('Setup Subscription')
-			);
-
-			if (primaryButton) {
-				if (state.step === 1) {
-					primaryButton.disabled = true;
-					primaryButton.title = 'Please configure seats first';
-				} else {
-					primaryButton.disabled = false;
-					primaryButton.title = '';
-				}
-			}
-		}
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Bootstrapping
+	// ─────────────────────────────────────────────────────────────────────────────
+	function bindPlanGrid(grid) {
+		if (!grid || grid.dataset.erpSeatBillingBound === '1') return;
+		grid.dataset.erpSeatBillingBound = '1';
+		log('Binding to plan grid');
+		grid.addEventListener(
+			'click',
+			() => {
+				log('Grid clicked, scheduling refresh...');
+				setTimeout(refreshSelection, 100);
+			},
+			true,
+		);
 	}
 
-	// ── Fixed: debounced observer that ignores our own panel mutations ─────────
-	function observe() {
-		// Start the background watchers before the first mount so we catch late DOM
-		// inserts, route changes, and history navigation.
-		const refresh = debounce(() => {
-			maybeMount();
-			interceptDialogButtons();
-		}, 150);
+	function startObserver() {
+		const scan = debounce(() => {
+			maybeMount().catch((error) => log('maybeMount failed', error));
+		}, 100);
 
-		const observer = new MutationObserver((mutations) => {
-			// Ignore mutations caused by our own panel to prevent infinite render loop
-			const isOwnMutation = mutations.every(m =>
-				state.panel && (
-					state.panel.contains(m.target) ||
-					m.target === state.panel
-				)
-			);
-			if (isOwnMutation) return;
-			refresh();
-		});
-
+		const observer = new MutationObserver(scan);
 		observer.observe(document.documentElement, {
 			childList: true,
 			subtree: true,
+			attributes: true,
 		});
 
-		window.addEventListener('popstate', refresh);
-		window.addEventListener('erpnext-seat-billing:navigation', refresh);
-
-		const originalPushState = history.pushState;
-		const originalReplaceState = history.replaceState;
-
-		history.pushState = function () {
-			originalPushState.apply(this, arguments);
-			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-		};
-		history.replaceState = function () {
-			originalReplaceState.apply(this, arguments);
-			window.dispatchEvent(new Event('erpnext-seat-billing:navigation'));
-		};
+		window.addEventListener('popstate', scan);
+		window.addEventListener('hashchange', scan);
+		scan();
 	}
 
-	async function init() {
-		// Boot order:
-		// 1) start observers (these watch for route changes to arm the script)
-		// 2) fetch plans
-		// 3) mount into the current page state (trigging lazy patching if route is relevant)
-		observe();
-
-
-		await maybeMount();
+	function start() {
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+			return;
+		}
+		startObserver();
 	}
 
-	if (document.readyState === 'loading') {
-		// Defer startup until the dashboard DOM exists.
-		document.addEventListener('DOMContentLoaded', init, { once: true });
-	} else {
-		// If the DOM is already ready, initialize immediately.
-		init();
-	}
+	start();
 })();
