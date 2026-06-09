@@ -201,19 +201,22 @@
 	}
 
 	function findPlanByBillingType(billingType, fallbackPlanName = null) {
-		if (billingType) {
-			const normalizedBillingType = normalize(billingType);
-			const directMatch = state.plans.find((plan) => normalize(plan.billing_type) === normalizedBillingType);
-			if (directMatch) return directMatch;
+		if (!fallbackPlanName) return null;
+
+		const normalizedName = normalize(fallbackPlanName);
+		const candidate = state.plans.find((plan) => normalize(plan.name) === normalizedName);
+		if (!candidate) {
+			return null;
 		}
 
-		if (!fallbackPlanName) return null;
-		const normalizedName = normalize(fallbackPlanName);
-		return (
-			state.plans.find((plan) => normalize(plan.name) === normalizedName) ||
-			state.plans.find((plan) => normalize(plan.plan_title) === normalizedName) ||
-			null
-		);
+		if (billingType) {
+			const normalizedBillingType = normalize(billingType);
+			if (normalizedBillingType && normalize(candidate.billing_type) !== normalizedBillingType) {
+				return null;
+			}
+		}
+
+		return candidate;
 	}
 
 	function decoratePlanCards(grid) {
@@ -366,7 +369,7 @@
 
 		const plan = findPlanByBillingType(
 			selectedButton.dataset?.billingType || '',
-			selectedButton.dataset?.planName || selectedButton.dataset?.planTitle || selectedButton.textContent || '',
+			selectedButton.dataset?.planName || '',
 		);
 		log('Found plan by billing type:', plan?.name || 'none');
 		return plan;
@@ -735,13 +738,13 @@
 			nestedArgs?.subscription_plan ||
 			nestedDocs?.subscription_plan ||
 			nestedDocs?.plan;
-		const plan = findPlanByBillingType(
+	const plan = findPlanByBillingType(
 			parsed?.billing_type ||
 				nestedArgs?.billing_type ||
 				nestedDocs?.billing_type ||
 				(state.selectedPlan && state.selectedPlan.billing_type) ||
 				'',
-			planName,
+			planName || state.selectedPlan?.name || '',
 		);
 
 		if (!isSeatBased(plan)) {
