@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 
 import frappe
 from frappe.utils import cint, flt, now_datetime
+from erpnext_saas_model.doctype.subscription.log_subscription_seat_debug import _log_subscription_seat_debug
 
 from press.press.doctype.subscription.subscription import Subscription as PressSubscription
 
@@ -28,23 +28,6 @@ class Subscription(PressSubscription):
 	Overrides base PressSubscription to handle seat count validation, 
 	usage recording, and billing calculations.
 	"""
-
-	def _log_subscription_seat_debug(self, event_type: str, payload=None, decision=None, status: str = "info") -> None:
-		"""Write structured seat-billing logs for subscription validation flow."""
-		logger = frappe.logger("erpnext_saas_model_subscription", allow_site=True)
-		entry = {
-			"event_type": event_type,
-			"payload": payload,
-			"decision": decision,
-			"timestamp": now_datetime().isoformat(),
-		}
-		message = json.dumps(entry, default=str, sort_keys=True)
-		if status == "warning":
-			logger.warning(message)
-		elif status == "error":
-			logger.error(message)
-		else:
-			logger.info(message)
 
 	def _get_seed_billable_seats(self, plan) -> int:
 		"""
@@ -87,7 +70,7 @@ class Subscription(PressSubscription):
 		- Calculates the total_amount (billable_seats * price_per_seat).
 		"""
 		super().before_validate()
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"before_validate.start",
 			{
 				"subscription": self.name,
@@ -99,7 +82,7 @@ class Subscription(PressSubscription):
 			},
 		)
 		if not self.plan:
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"before_validate.skip",
 				{"subscription": self.name, "reason": "NO_PLAN"},
 			)
@@ -107,7 +90,7 @@ class Subscription(PressSubscription):
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"before_validate.skip",
 				{
 					"subscription": self.name,
@@ -128,7 +111,7 @@ class Subscription(PressSubscription):
 		# Calculate total subscription amount
 		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
 		self.seats_last_updated = getattr(self, "seats_last_updated", None) or now_datetime()
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"before_validate.complete",
 			{
 				"subscription": self.name,
@@ -147,7 +130,7 @@ class Subscription(PressSubscription):
 		- Finalizes the total_amount calculation.
 		"""
 		super().validate()
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"validate.start",
 			{
 				"subscription": self.name,
@@ -157,7 +140,7 @@ class Subscription(PressSubscription):
 			},
 		)
 		if not self.plan:
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"validate.skip",
 				{"subscription": self.name, "reason": "NO_PLAN"},
 			)
@@ -165,7 +148,7 @@ class Subscription(PressSubscription):
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"validate.skip",
 				{
 					"subscription": self.name,
@@ -180,7 +163,7 @@ class Subscription(PressSubscription):
 		
 		# Ensure seat count stays within plan boundaries and doesn't fall behind the site state
 		self.billable_seats = self._get_effective_billable_seats(plan)
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"validate.compare",
 			{
 				"subscription": self.name,
@@ -197,7 +180,7 @@ class Subscription(PressSubscription):
 			},
 		)
 		if self.billable_seats < min_seats:
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"validate.block",
 				{
 					"subscription": self.name,
@@ -216,7 +199,7 @@ class Subscription(PressSubscription):
 			frappe.throw(f"You need at least {min_seats} seats on this plan.")
 
 		if max_seats and self.billable_seats > max_seats:
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"validate.block",
 				{
 					"subscription": self.name,
@@ -233,7 +216,7 @@ class Subscription(PressSubscription):
 			self.price_per_seat = get_plan_price_per_seat(plan)
 
 		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"validate.complete",
 			{
 				"subscription": self.name,
