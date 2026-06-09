@@ -56,7 +56,13 @@ class Subscription(PressSubscription):
 		current_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		seed_seats = self._get_seed_billable_seats(plan)
 		min_seats = cint(getattr(plan, "min_seats", 0) or 1)
-		requested_seats = current_seats or seed_seats
+		site_requested_seats = 0
+		if getattr(self, "document_type", None) == "Site" and getattr(self, "document_name", None):
+			site_requested_seats = cint(
+				frappe.db.get_value("Site", self.document_name, "billable_seats") or 0
+			)
+
+		requested_seats = site_requested_seats or current_seats or seed_seats
 
 		if requested_seats < min_seats:
 			frappe.throw(f"You need at least {min_seats} seats on this plan.")
