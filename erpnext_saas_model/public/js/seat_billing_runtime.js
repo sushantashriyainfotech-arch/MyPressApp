@@ -93,7 +93,11 @@
 	async function getCurrentTeamData() {
 		console.log(window);
 		try {
-			const res = await fetch('/api/method/press.api.team.get_current_team', {
+			const currentTeam = localStorage.getItem('current_team') || '';
+			const url = currentTeam
+				? `/api/method/press.api.team.get_current_team_locale?team_name=${encodeURIComponent(currentTeam)}`
+				: '/api/method/press.api.team.get_current_team_locale';
+			const res = await fetch(url, {
 				credentials: 'same-origin',
 			});
 			const data = await res.json();
