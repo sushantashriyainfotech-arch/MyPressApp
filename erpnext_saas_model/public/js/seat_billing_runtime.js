@@ -230,24 +230,30 @@
 			const plan = state.plans[index];
 			if (!plan) return;
 
-			button.classList.add('relative');
-			button.style.position = 'relative';
+			const seatBased = isSeatBased(plan);
 			button.dataset.planName = plan.name;
-			button.dataset.billingType = plan.billing_type || '';
+			button.dataset.billingType = seatBased ? 'Seat Based' : 'Resource Based';
 
-			const badgeText = plan.billing_type || 'Resource Based';
-			const normalizedBadgeText = normalize(badgeText);
+			const badgeText = seatBased ? 'Seat Based' : 'Resource Based';
+			if (seatBased && !button.dataset.seatPricingAdjusted) {
+				button.innerHTML = button.innerHTML.replace('/mo', '/seat/mo');
+				button.dataset.seatPricingAdjusted = '1';
+			}
 			let badgeEl = button.querySelector('[data-role="plan-badge"]');
 			if (!badgeEl) {
 				badgeEl = document.createElement('div');
 				badgeEl.dataset.role = 'plan-badge';
 				button.prepend(badgeEl);
 			}
-			badgeEl.className = `erp-seat-billing-plan-badge absolute right-2 top-2 z-10 pointer-events-none inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ${
-				normalizedBadgeText === normalize('Seat Based')
+			badgeEl.className = `erp-seat-billing-plan-badge pointer-events-none inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ${
+				seatBased
 					? 'border border-ink-gray-9 bg-ink-gray-9 text-white shadow-sm'
 					: 'border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5'
 			}`;
+			badgeEl.style.display = 'block';
+			badgeEl.style.width = 'fit-content';
+			badgeEl.style.marginLeft = 'auto';
+			badgeEl.style.marginBottom = '0.35rem';
 			badgeEl.textContent = badgeText;
 
 			const normalizedText = normalize(button.textContent || '');
