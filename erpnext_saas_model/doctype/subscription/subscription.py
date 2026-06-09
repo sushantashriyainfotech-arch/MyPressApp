@@ -48,12 +48,29 @@ class Subscription(PressSubscription):
 	def _get_effective_billable_seats(self, plan) -> int:
 		"""
 		Returns the seat count that should be enforced for this subscription.
-		Prioritizes the existing subscription value, but never allows it to fall
-		below the site's current billed seats or the plan minimum.
+		Allows downgrades only when the site's active users fit within the
+		requested seat count, while never allowing the count to fall below the
+		plan minimum.
 		"""
 		current_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		seed_seats = self._get_seed_billable_seats(plan)
-		return max(current_seats, seed_seats)
+		min_seats = cint(getattr(plan, "min_seats", 0) or 1)
+		requested_seats = current_seats or seed_seats
+
+		if requested_seats < min_seats:
+			frappe.throw(f"You need at least {min_seats} seats on this plan.")
+
+		site_name = getattr(self, "site", None) or (
+			self.document_name if getattr(self, "document_type", None) == "Site" else None
+		)
+		active_user_count = get_site_user_active_count(site_name) if site_name else 0
+		if site_name and active_user_count > requested_seats:
+			frappe.throw(
+				"Please deactivate users before reducing your seat count. "
+				f"You currently have {active_user_count} active users, but the requested seat count is {requested_seats}."
+			)
+
+		return requested_seats
 
 	def _clear_seat_billing_fields(self, plan=None) -> None:
 		"""Reset seat-billing fields when the subscription is no longer seat-based."""
