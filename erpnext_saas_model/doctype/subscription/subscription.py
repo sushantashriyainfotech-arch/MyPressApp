@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import frappe
 from frappe.utils import cint, flt, now_datetime
 
@@ -26,6 +28,23 @@ class Subscription(PressSubscription):
 	Overrides base PressSubscription to handle seat count validation, 
 	usage recording, and billing calculations.
 	"""
+
+	def _log_subscription_seat_debug(self, event_type: str, payload=None, decision=None, status: str = "info") -> None:
+		"""Write structured seat-billing logs for subscription validation flow."""
+		logger = frappe.logger("erpnext_saas_model_subscription", allow_site=True)
+		entry = {
+			"event_type": event_type,
+			"payload": payload,
+			"decision": decision,
+			"timestamp": now_datetime().isoformat(),
+		}
+		message = json.dumps(entry, default=str, sort_keys=True)
+		if status == "warning":
+			logger.warning(message)
+		elif status == "error":
+			logger.error(message)
+		else:
+			logger.info(message)
 
 	def _get_seed_billable_seats(self, plan) -> int:
 		"""
@@ -68,11 +87,34 @@ class Subscription(PressSubscription):
 		- Calculates the total_amount (billable_seats * price_per_seat).
 		"""
 		super().before_validate()
+		self._log_subscription_seat_debug(
+			"before_validate.start",
+			{
+				"subscription": self.name,
+				"plan_type": getattr(self, "plan_type", None),
+				"plan": getattr(self, "plan", None),
+				"billable_seats": getattr(self, "billable_seats", None),
+				"document_type": getattr(self, "document_type", None),
+				"document_name": getattr(self, "document_name", None),
+			},
+		)
 		if not self.plan:
+			self._log_subscription_seat_debug(
+				"before_validate.skip",
+				{"subscription": self.name, "reason": "NO_PLAN"},
+			)
 			return
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
+			self._log_subscription_seat_debug(
+				"before_validate.skip",
+				{
+					"subscription": self.name,
+					"plan": self.plan,
+					"reason": "RESOURCE_BASED",
+				},
+			)
 			self._clear_seat_billing_fields(plan)
 			return
 
@@ -86,6 +128,17 @@ class Subscription(PressSubscription):
 		# Calculate total subscription amount
 		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
 		self.seats_last_updated = getattr(self, "seats_last_updated", None) or now_datetime()
+		self._log_subscription_seat_debug(
+			"before_validate.complete",
+			{
+				"subscription": self.name,
+				"plan": self.plan,
+				"billable_seats": self.billable_seats,
+				"price_per_seat": self.price_per_seat,
+				"total_amount": self.total_amount,
+				"seats_last_updated": self.seats_last_updated,
+			},
+		)
 
 	def validate(self):
 		"""
@@ -94,11 +147,32 @@ class Subscription(PressSubscription):
 		- Finalizes the total_amount calculation.
 		"""
 		super().validate()
+		self._log_subscription_seat_debug(
+			"validate.start",
+			{
+				"subscription": self.name,
+				"plan_type": getattr(self, "plan_type", None),
+				"plan": getattr(self, "plan", None),
+				"billable_seats": getattr(self, "billable_seats", None),
+			},
+		)
 		if not self.plan:
+			self._log_subscription_seat_debug(
+				"validate.skip",
+				{"subscription": self.name, "reason": "NO_PLAN"},
+			)
 			return
 
 		plan = frappe.get_cached_doc(self.plan_type, self.plan)
 		if not is_seat_based_plan(plan):
+			self._log_subscription_seat_debug(
+				"validate.skip",
+				{
+					"subscription": self.name,
+					"plan": self.plan,
+					"reason": "RESOURCE_BASED",
+				},
+			)
 			return
 
 		min_seats = cint(getattr(plan, "min_seats", 0) or 1)
@@ -106,16 +180,69 @@ class Subscription(PressSubscription):
 		
 		# Ensure seat count stays within plan boundaries and doesn't fall behind the site state
 		self.billable_seats = self._get_effective_billable_seats(plan)
+		self._log_subscription_seat_debug(
+			"validate.compare",
+			{
+				"subscription": self.name,
+				"plan": self.plan,
+				"plan_min_seats": min_seats,
+				"plan_max_seats": max_seats,
+				"billable_seats": self.billable_seats,
+				"price_per_seat": getattr(self, "price_per_seat", None),
+				"site_billable_seats": frappe.db.get_value(
+					"Site", self.document_name, "billable_seats"
+				)
+				if getattr(self, "document_type", None) == "Site" and getattr(self, "document_name", None)
+				else None,
+			},
+		)
 		if self.billable_seats < min_seats:
+			self._log_subscription_seat_debug(
+				"validate.block",
+				{
+					"subscription": self.name,
+					"plan": self.plan,
+					"billable_seats": self.billable_seats,
+					"plan_min_seats": min_seats,
+					"site_billable_seats": frappe.db.get_value(
+						"Site", self.document_name, "billable_seats"
+					)
+					if getattr(self, "document_type", None) == "Site" and getattr(self, "document_name", None)
+					else None,
+				},
+				{"can_save": False, "reason": "BELOW_MIN_SEATS"},
+				status="warning",
+			)
 			frappe.throw(f"You need at least {min_seats} seats on this plan.")
 
 		if max_seats and self.billable_seats > max_seats:
+			self._log_subscription_seat_debug(
+				"validate.block",
+				{
+					"subscription": self.name,
+					"plan": self.plan,
+					"billable_seats": self.billable_seats,
+					"plan_max_seats": max_seats,
+				},
+				{"can_save": False, "reason": "ABOVE_MAX_SEATS"},
+				status="warning",
+			)
 			frappe.throw(f"This plan allows a maximum of {max_seats} seats.")
 
 		if not getattr(self, "price_per_seat", None):
 			self.price_per_seat = get_plan_price_per_seat(plan)
 
 		self.total_amount = flt(cint(self.billable_seats) * flt(self.price_per_seat or 0, 2), 2)
+		self._log_subscription_seat_debug(
+			"validate.complete",
+			{
+				"subscription": self.name,
+				"plan": self.plan,
+				"billable_seats": self.billable_seats,
+				"price_per_seat": self.price_per_seat,
+				"total_amount": self.total_amount,
+			},
+		)
 
 	def before_save(self):
 		"""
