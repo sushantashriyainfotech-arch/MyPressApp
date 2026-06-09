@@ -118,6 +118,9 @@ def ensure_subscription_fields():
 			"fieldname": "billable_seats",
 			"fieldtype": "Int",
 			"default": "1",
+			"fetch_from": "plan.min_seats",
+			"fetch_if_empty": 1,
+			"depends_on": "eval:doc.plan_type == 'Site Plan'",
 			"insert_after": "plan",
 		},
 	)
@@ -129,6 +132,9 @@ def ensure_subscription_fields():
 			"fieldname": "price_per_seat",
 			"fieldtype": "Currency",
 			"options": "INR",
+			"fetch_from": "plan.price_per_seat",
+			"fetch_if_empty": 1,
+			"depends_on": "eval:doc.plan_type == 'Site Plan'",
 			"insert_after": "billable_seats",
 		},
 	)
@@ -140,6 +146,7 @@ def ensure_subscription_fields():
 			"fieldname": "total_amount",
 			"fieldtype": "Currency",
 			"options": "INR",
+			"depends_on": "eval:doc.plan_type == 'Site Plan'",
 			"insert_after": "price_per_seat",
 		},
 	)
