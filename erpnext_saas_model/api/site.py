@@ -64,7 +64,7 @@ def get_site_plans():
 
 
 @frappe.whitelist()
-def change_plan(name, plan, billable_seats=None, price_usd=None):
+def change_plan(name, plan, billable_seats=None, price_inr=None, price_usd=None):
 	site = frappe.get_doc("Site", name)
 	frappe.logger("erpnext_saas_model.seat_debug").info(
 		json.dumps(
@@ -75,13 +75,14 @@ def change_plan(name, plan, billable_seats=None, price_usd=None):
 				"resolved_site_team": getattr(site, "team", None),
 				"plan": plan,
 				"billable_seats": billable_seats,
+				"price_inr": price_inr,
 				"price_usd": price_usd,
 			},
 			default=str,
 		)
 	)
 	if billable_seats is not None:
-		site.set_plan(plan, billable_seats=billable_seats, price_usd=price_usd)
+		site.set_plan(plan, billable_seats=billable_seats, price_inr=price_inr, price_usd=price_usd)
 		return
 
 	return change_press_plan(name, plan)

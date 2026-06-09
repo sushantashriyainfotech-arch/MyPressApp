@@ -159,6 +159,7 @@ class Site(PressSite):
 		self,
 		plan: None | str = None,
 		billable_seats: int | None = None,
+		price_inr: float | None = None,
 		price_usd: float | None = None,
 	):
 		"""
@@ -173,6 +174,7 @@ class Site(PressSite):
 					"team": getattr(self, "team", None),
 					"plan": plan,
 					"billable_seats": billable_seats,
+					"price_inr": price_inr,
 					"price_usd": price_usd,
 					"current_plan": getattr(self, "subscription_plan", None) or getattr(self, "plan", None),
 					"current_billable_seats": getattr(self, "billable_seats", None),
