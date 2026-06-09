@@ -227,25 +227,26 @@
 			const plan = state.plans[index];
 			if (!plan) return;
 
-			const planTitle = plan.plan_title || plan.name;
-			if (!planTitle) return;
-
 			button.dataset.planName = plan.name;
-			button.dataset.planTitle = planTitle;
 			button.dataset.billingType = plan.billing_type || '';
 
-			const normalizedText = normalize(button.textContent || '');
-			if (normalizedText.includes(normalize(planTitle))) return;
-
-			const titleClass = 'erp-seat-billing-plan-title text-sm font-semibold text-ink-gray-9 mb-1';
-			let titleEl = button.querySelector('[data-role="plan-title"]');
-			if (!titleEl) {
-				titleEl = document.createElement('div');
-				titleEl.dataset.role = 'plan-title';
-				titleEl.className = titleClass;
-				button.prepend(titleEl);
+			const badgeText = plan.billing_type || 'Resource Based';
+			const normalizedBadgeText = normalize(badgeText);
+			let badgeEl = button.querySelector('[data-role="plan-badge"]');
+			if (!badgeEl) {
+				badgeEl = document.createElement('div');
+				badgeEl.dataset.role = 'plan-badge';
+				button.prepend(badgeEl);
 			}
-			titleEl.textContent = planTitle;
+			badgeEl.className = `erp-seat-billing-plan-badge inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide ${
+				normalizedBadgeText === normalize('Seat Based')
+					? 'bg-ink-green-1 text-ink-green-9'
+					: 'bg-surface-gray-2 text-ink-gray-7'
+			}`;
+			badgeEl.textContent = badgeText;
+
+			const normalizedText = normalize(button.textContent || '');
+			if (normalizedText.includes(normalize(plan.name)) || normalizedText.includes(normalize(plan.plan_title))) return;
 		});
 	}
 
