@@ -68,14 +68,14 @@ class Subscription(PressSubscription):
 			self.document_name if getattr(self, "document_type", None) == "Site" else None
 		)
 		if not site_name:
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"sync_site_billable_seats.skipped",
 				{"subscription": self.name, "reason": "NO_SITE_LINKED"},
 			)
 			return
 
 		if not is_seat_based_plan(plan):
-			self._log_subscription_seat_debug(
+			_log_subscription_seat_debug(
 				"sync_site_billable_seats.skipped",
 				{
 					"subscription": self.name,
@@ -88,7 +88,7 @@ class Subscription(PressSubscription):
 		current_seats = cint(getattr(self, "billable_seats", 0) or 0)
 		previous_site_seats = cint(frappe.db.get_value("Site", site_name, "billable_seats") or 0)
 		frappe.db.set_value("Site", site_name, "billable_seats", current_seats, update_modified=False)
-		self._log_subscription_seat_debug(
+		_log_subscription_seat_debug(
 			"sync_site_billable_seats.updated",
 			{
 				"subscription": self.name,
