@@ -200,9 +200,15 @@
 			: Number(plan.price_usd || plan.price_inr || 0);
 	}
 
-	function findPlanByName(planName) {
-		if (!planName) return null;
-		const normalizedName = normalize(planName);
+	function findPlanByBillingType(billingType, fallbackPlanName = null) {
+		if (billingType) {
+			const normalizedBillingType = normalize(billingType);
+			const directMatch = state.plans.find((plan) => normalize(plan.billing_type) === normalizedBillingType);
+			if (directMatch) return directMatch;
+		}
+
+		if (!fallbackPlanName) return null;
+		const normalizedName = normalize(fallbackPlanName);
 		return (
 			state.plans.find((plan) => normalize(plan.name) === normalizedName) ||
 			state.plans.find((plan) => normalize(plan.plan_title) === normalizedName) ||
@@ -210,20 +216,37 @@
 		);
 	}
 
-	function findPlanByText(text) {
-		const normalizedText = normalize(text);
-		if (!normalizedText) return null;
+	function decoratePlanCards(grid) {
+		if (!grid || !Array.isArray(state.plans) || !state.plans.length) return;
 
-		return (
-			state.plans.find((plan) => {
-				const title = normalize(plan.plan_title);
-				const name = normalize(plan.name);
-				return (
-					(normalizedText.includes(title) && title.length > 0) ||
-					(normalizedText.includes(name) && name.length > 0)
-				);
-			}) || null
+		const buttons = Array.from(grid.querySelectorAll('button')).filter((button) =>
+			MONTHLY_TEXT_RE.test(button.textContent || ''),
 		);
+
+		buttons.forEach((button, index) => {
+			const plan = state.plans[index];
+			if (!plan) return;
+
+			const planTitle = plan.plan_title || plan.name;
+			if (!planTitle) return;
+
+			button.dataset.planName = plan.name;
+			button.dataset.planTitle = planTitle;
+			button.dataset.billingType = plan.billing_type || '';
+
+			const normalizedText = normalize(button.textContent || '');
+			if (normalizedText.includes(normalize(planTitle))) return;
+
+			const titleClass = 'erp-seat-billing-plan-title text-sm font-semibold text-ink-gray-9 mb-1';
+			let titleEl = button.querySelector('[data-role="plan-title"]');
+			if (!titleEl) {
+				titleEl = document.createElement('div');
+				titleEl.dataset.role = 'plan-title';
+				titleEl.className = titleClass;
+				button.prepend(titleEl);
+			}
+			titleEl.textContent = planTitle;
+		});
 	}
 
 	async function loadPlans() {
@@ -340,8 +363,11 @@
 		log('Selected button:', selectedButton);
 		if (!selectedButton) return null;
 
-		const plan = findPlanByText(selectedButton.textContent || '');
-		log('Found plan by text:', plan?.name || 'none');
+		const plan = findPlanByBillingType(
+			selectedButton.dataset?.billingType || '',
+			selectedButton.dataset?.planName || selectedButton.dataset?.planTitle || selectedButton.textContent || '',
+		);
+		log('Found plan by billing type:', plan?.name || 'none');
 		return plan;
 	}
 
@@ -544,6 +570,7 @@
 	function refreshSelection() {
 		if (!state.planGrid) return;
 		log('Refreshing selection...');
+		decoratePlanCards(state.planGrid);
 		const selected = getSelectedPlanFromGrid(state.planGrid);
 
 		if (selected) {
@@ -707,7 +734,14 @@
 			nestedArgs?.subscription_plan ||
 			nestedDocs?.subscription_plan ||
 			nestedDocs?.plan;
-		const plan = findPlanByName(planName);
+		const plan = findPlanByBillingType(
+			parsed?.billing_type ||
+				nestedArgs?.billing_type ||
+				nestedDocs?.billing_type ||
+				(state.selectedPlan && state.selectedPlan.billing_type) ||
+				'',
+			planName,
+		);
 
 		if (!isSeatBased(plan)) {
 			if (bodyIsSearchParams) {
