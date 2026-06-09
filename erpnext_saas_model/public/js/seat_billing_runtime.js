@@ -220,6 +220,11 @@
 	}
 
 	async function loadLocale() {
+
+		if (state.country && state.currency) {
+			return;
+		}
+
 		const data = await getCurrentTeamData();
 		state.country = data?.country || state.country;
 		state.currency = data?.currency || state.currency;
