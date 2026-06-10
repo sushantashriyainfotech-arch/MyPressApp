@@ -11,15 +11,15 @@
 	}
 
 	function getSelectedPrice(frm) {
-		const currency = getCurrencyCode();
+		const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 		const inr = Number(frm.doc.price_inr || 0);
 		const usd = Number(frm.doc.price_usd || 0);
 		return currency === "INR" ? inr || usd : usd || inr;
 	}
 
-	function formatMoney(value) {
+	function formatMoney(value, currencyOverride = null) {
 		const amount = Number(value || 0);
-		const currency = getCurrencyCode();
+		const currency = (currencyOverride || getCurrencyCode() || "USD").toUpperCase();
 		try {
 			return new Intl.NumberFormat(undefined, {
 				style: "currency",
@@ -42,13 +42,16 @@
 		const seats = Number(frm.doc.billable_seats || 0);
 		const selectedPrice = Number(getSelectedPrice(frm) || 0);
 		const total = Number((seats * selectedPrice).toFixed(2));
+		const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 
 		if (Number(frm.doc.total_amount || 0) !== total) {
 			frm.set_value("total_amount", total);
 			return;
 		}
 
-		frm.dashboard.set_headline(`${seats} seats × ${formatMoney(selectedPrice)} = ${formatMoney(total)}`);
+		frm.dashboard.set_headline(
+			`${seats} seats × ${formatMoney(selectedPrice, currency)} = ${formatMoney(total, currency)}`
+		);
 	}
 
 	frappe.ui.form.on("Subscription", {
@@ -57,9 +60,10 @@
 			updateSeatTotals(frm);
 			frm.add_custom_button(__("Seat Summary"), () => {
 				const selectedPrice = getSelectedPrice(frm);
+				const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 				frappe.msgprint({
 					title: __("Current seat commitment"),
-					message: `${Number(frm.doc.billable_seats || 0)} seats × ${formatMoney(selectedPrice)} = ${formatMoney(frm.doc.total_amount)}`,
+					message: `${Number(frm.doc.billable_seats || 0)} seats × ${formatMoney(selectedPrice, currency)} = ${formatMoney(frm.doc.total_amount, currency)}`,
 					indicator: "blue",
 				});
 			});
