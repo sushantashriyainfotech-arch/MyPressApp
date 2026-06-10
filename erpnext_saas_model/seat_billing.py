@@ -73,7 +73,11 @@ def get_plan_price_for_currency(
 	currency = (currency or "USD").upper()
 	preferred_field = "price_inr" if currency == "INR" else "price_usd"
 	fallback_field = "price_usd" if preferred_field == "price_inr" else "price_inr"
-	price = getattr(plan, preferred_field, None) or getattr(plan, fallback_field, None) or 0
+	price = getattr(plan, preferred_field, None)
+	if price in (None, ""):
+		price = getattr(plan, fallback_field, None)
+	if price in (None, ""):
+		price = 0
 
 	return flt(price, 2)
 

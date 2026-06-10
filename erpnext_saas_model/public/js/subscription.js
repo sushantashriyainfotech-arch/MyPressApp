@@ -14,7 +14,9 @@
 		const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 		const inr = Number(frm.doc.price_inr || 0);
 		const usd = Number(frm.doc.price_usd || 0);
-		return currency === "INR" ? inr || usd : usd || inr;
+		const hasInr = frm.doc.price_inr !== null && frm.doc.price_inr !== undefined && frm.doc.price_inr !== "";
+		const hasUsd = frm.doc.price_usd !== null && frm.doc.price_usd !== undefined && frm.doc.price_usd !== "";
+		return currency === "INR" ? (hasInr ? inr : usd) : (hasUsd ? usd : inr);
 	}
 
 	function formatMoney(value, currencyOverride = null) {
