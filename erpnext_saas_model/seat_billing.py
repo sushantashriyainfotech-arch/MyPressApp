@@ -1024,84 +1024,7 @@ def create_seat_usage_record(subscription: str | dict[str, Any], date=None, forc
 	if subscription_doc.is_usage_record_created(date):
 		return None
 
-	if date == getdate() and not force:
-		backfill_missing_seat_usage_records(subscription_doc, date)
-
 	return _insert_seat_usage_record(subscription_doc, date)
-
-
-def get_seat_billing_start_date(subscription_doc) -> datetime | None:
-	"""
-	Returns the first timestamp when the current paid plan became active.
-	For trial-to-paid flows, this is the first Site Plan Change timestamp for the current plan.
-	"""
-	site_name = getattr(subscription_doc, "site", None) or (
-		getattr(subscription_doc, "document_name", None)
-		if getattr(subscription_doc, "document_type", None) == "Site"
-		else None
-	)
-	plan_name = getattr(subscription_doc, "plan", None)
-	if not site_name or not plan_name:
-		return getattr(subscription_doc, "creation", None)
-
-	plan_change_ts = frappe.db.get_value(
-		"Site Plan Change",
-		{"site": site_name, "to_plan": plan_name},
-		"timestamp",
-		order_by="timestamp asc",
-	)
-	if plan_change_ts:
-		return plan_change_ts
-
-	return getattr(subscription_doc, "creation", None)
-
-
-def backfill_missing_seat_usage_records(subscription, upto_date=None):
-	"""
-	Ensures there are no gaps in usage records for the current billing cycle.
-	Creates 'backfill' snapshots using the legacy seat count if necessary.
-	The backfill window never starts before the paid billing start date.
-	"""
-	subscription_doc = (
-		frappe.get_cached_doc("Subscription", subscription)
-		if isinstance(subscription, str)
-		else frappe.get_cached_doc("Subscription", subscription.get("name"))
-	)
-	if not is_seat_based_plan(subscription_doc.plan):
-		return []
-
-	upto_date = getdate(upto_date or frappe.utils.today())
-	cycle_start = getdate(frappe.utils.get_first_day(upto_date))
-	billing_start = get_seat_billing_start_date(subscription_doc)
-	if billing_start:
-		billing_start = getdate(billing_start)
-		if billing_start > cycle_start:
-			cycle_start = billing_start
-
-	existing_dates = set(
-		getdate(date)
-		for date in frappe.get_all(
-			"Usage Record",
-			filters={"subscription": subscription_doc.name, "date": ("between", (cycle_start, upto_date))},
-			pluck="date",
-		)
-	)
-	missing_dates = []
-	current = cycle_start
-	while current < upto_date:
-		if current not in existing_dates:
-			missing_dates.append(current)
-		current = current + timedelta(days=1)
-
-	if missing_dates:
-		frappe.logger("erpnext_saas_model.seat_billing").warning(
-			f"Backfilling {len(missing_dates)} seat usage record(s) for subscription {subscription_doc.name}"
-		)
-
-	for missing_date in missing_dates:
-		_insert_seat_usage_record(subscription_doc, missing_date, backfill=True)
-
-	return missing_dates
 
 
 def create_seat_usage_records(date=None):
@@ -1244,7 +1167,7 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 	}
 
 
-def _insert_seat_usage_record(subscription, date, backfill: bool = False):
+def _insert_seat_usage_record(subscription, date):
 	"""Internal helper to insert a 'Usage Record' document into the database."""
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
 	team_currency = get_team_currency(subscription.team)
@@ -1252,10 +1175,10 @@ def _insert_seat_usage_record(subscription, date, backfill: bool = False):
 	billable_seats = cint(subscription.billable_seats or 0)
 	seat_amount = flt(selected_price * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
-	seat_change_log = get_seat_change_log_for_reference(subscription.name, reference_at=date if backfill else snapshot_taken_at)
+	seat_change_log = get_seat_change_log_for_reference(subscription.name, reference_at=snapshot_taken_at)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
-		reference_at=snapshot_taken_at if not backfill else date,
+		reference_at=snapshot_taken_at,
 		seat_change_log=seat_change_log,
 		fallback_billable_seats=billable_seats,
 	)

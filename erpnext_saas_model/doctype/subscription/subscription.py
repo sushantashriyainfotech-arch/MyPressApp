@@ -8,7 +8,6 @@ from erpnext_saas_model.doctype.subscription.log_subscription_seat_debug import 
 from press.press.doctype.subscription.subscription import Subscription as PressSubscription
 
 from erpnext_saas_model.seat_billing import (
-	backfill_missing_seat_usage_records,
 	create_seat_usage_record,
 	get_billing_effective_from,
 	get_plan_price_for_currency,
@@ -378,10 +377,6 @@ class Subscription(PressSubscription):
 		# Standard Press usage collection happens once a day (after 6 PM)
 		if date == frappe.utils.getdate() and frappe.utils.now_datetime().time().hour < 18:
 			return None
-
-		if date == frappe.utils.getdate():
-			# Ensure we have all necessary seat logs before creating the final daily record
-			backfill_missing_seat_usage_records(self, date)
 
 		return create_seat_usage_record(self, date=date, force=True)
 	
