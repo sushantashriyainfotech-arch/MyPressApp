@@ -1030,10 +1030,37 @@ def create_seat_usage_record(subscription: str | dict[str, Any], date=None, forc
 	return _insert_seat_usage_record(subscription_doc, date)
 
 
+def get_seat_billing_start_date(subscription_doc) -> datetime | None:
+	"""
+	Returns the first timestamp when the current paid plan became active.
+	For trial-to-paid flows, this is the first Site Plan Change timestamp for the current plan.
+	"""
+	site_name = getattr(subscription_doc, "site", None) or (
+		getattr(subscription_doc, "document_name", None)
+		if getattr(subscription_doc, "document_type", None) == "Site"
+		else None
+	)
+	plan_name = getattr(subscription_doc, "plan", None)
+	if not site_name or not plan_name:
+		return getattr(subscription_doc, "creation", None)
+
+	plan_change_ts = frappe.db.get_value(
+		"Site Plan Change",
+		{"site": site_name, "to_plan": plan_name},
+		"timestamp",
+		order_by="timestamp asc",
+	)
+	if plan_change_ts:
+		return plan_change_ts
+
+	return getattr(subscription_doc, "creation", None)
+
+
 def backfill_missing_seat_usage_records(subscription, upto_date=None):
 	"""
 	Ensures there are no gaps in usage records for the current billing cycle.
 	Creates 'backfill' snapshots using the legacy seat count if necessary.
+	The backfill window never starts before the paid billing start date.
 	"""
 	subscription_doc = (
 		frappe.get_cached_doc("Subscription", subscription)
@@ -1045,6 +1072,12 @@ def backfill_missing_seat_usage_records(subscription, upto_date=None):
 
 	upto_date = getdate(upto_date or frappe.utils.today())
 	cycle_start = getdate(frappe.utils.get_first_day(upto_date))
+	billing_start = get_seat_billing_start_date(subscription_doc)
+	if billing_start:
+		billing_start = getdate(billing_start)
+		if billing_start > cycle_start:
+			cycle_start = billing_start
+
 	existing_dates = set(
 		getdate(date)
 		for date in frappe.get_all(
