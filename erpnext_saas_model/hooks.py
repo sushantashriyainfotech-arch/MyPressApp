@@ -79,10 +79,14 @@ doctype_js = {
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "erpnext_saas_model.utils.jinja_methods",
-# 	"filters": "erpnext_saas_model.utils.jinja_filters"
-# }
+jinja = {
+	"methods": [
+		"erpnext_saas_model.email_branding.get_saas_brand_name",
+		"erpnext_saas_model.email_branding.get_saas_team_name",
+		"erpnext_saas_model.email_branding.get_saas_brand_logo",
+		"erpnext_saas_model.email_branding.get_saas_url",
+	]
+}
 
 # Installation
 # ------------

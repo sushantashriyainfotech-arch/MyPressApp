@@ -1,0 +1,22 @@
+{% import "templates/emails/macros.html" as utils %}
+{% extends "templates/emails/saas.html" %}
+{% set title = title %}
+{% set image_path = image_path %}
+{% set full_name = full_name %}
+{% set otp = otp %}
+{% set brand_name = brand_name or get_saas_brand_name() %}
+
+{% block content %}
+
+<td class="text-base leading-6 text-gray-900">
+    <div class="p-8 bg-white from-markdown">
+        <p><strong>Hi {{ full_name }}</strong></p>
+        <p>You have requested a verification code to login to your {{ brand_name|e }} account. The code is valid for 10 minutes.</p>
+        <div class="text-xl font-bold">{{ otp }}</div>
+		<p class="text-sm">If you haven't requested for this, please ignore this email.</p>
+        {{ utils.separator() }}
+        <p class="my-0">{{ get_saas_team_name(brand_name)|e }}</p>
+    </div>
+</td>
+
+{% endblock %}

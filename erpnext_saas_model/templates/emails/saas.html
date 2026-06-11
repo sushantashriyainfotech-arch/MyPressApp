@@ -1,0 +1,29 @@
+{% set brand_name = get_saas_brand_name(brand_name) %}
+{% set logo_path = get_saas_brand_logo(brand_logo or image_path) %}
+<table class="sm:bg-white bg-gray-100" cellpadding="0" cellspacing="0" role="presentation" width="100%">
+    <tr>
+        <td align="center" valign="top">
+            <table cellpadding="0" cellspacing="0" role="presentation" width="600px">
+                <tbody>
+                    <tr>
+                        <td class="px-8 pt-10 pb-8 text-center text-gray-900">
+                            <div>
+                                {% if logo_path %}
+                                <img src="{{ logo_path|e }}" alt="{{ brand_name|e }}" class="h-6 mx-auto">
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        {% block content %}{% endblock %}
+                    </tr>
+                    <tr>
+                        <td class="py-8 text-center text-gray-500 text-sm">
+                            This email was sent by {{ brand_name|e }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </td>
+    </tr>
+</table>

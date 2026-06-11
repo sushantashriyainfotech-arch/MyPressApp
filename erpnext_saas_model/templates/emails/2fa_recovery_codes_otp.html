@@ -1,0 +1,24 @@
+{% import "templates/emails/macros.html" as utils %}
+{% extends "templates/emails/saas.html" %}
+{% set title = title %}
+{% set image_path = image_path %}
+{% set read_pixel_path = read_pixel_path %}
+{% set otp = otp %}
+{% set brand_name = brand_name or get_saas_brand_name() %}
+
+{% block content %}
+
+<td class="text-base leading-6 text-gray-900">
+    <div class="p-8 bg-white from-markdown">
+        <p>Use below verification code to view your 2FA recovery codes in {{ brand_name|e }}!</p>
+        <p class="font-medium">Verification Code</p>
+        <div class="text-xl font-bold">{{ otp }}</div>
+        {{ utils.separator() }}
+        <p class="my-0">{{ get_saas_team_name(brand_name)|e }}</p>
+    </div>
+    {% if read_pixel_path %}
+    <img src="{{ read_pixel_path|e }}">
+    {% endif %}
+</td>
+
+{% endblock %}
