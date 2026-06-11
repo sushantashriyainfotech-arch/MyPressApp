@@ -1,6 +1,7 @@
 import frappe
 import re
 import os
+from erpnext_saas_model.email_branding import get_saas_brand_name
 
 no_cache = 1
 
@@ -19,3 +20,4 @@ def get_context(context):
 
     context.dashboard_js = js_match.group(1) if js_match else ''
     context.dashboard_css = css_match.group(1) if css_match else ''
+    context.dashboard_title = get_saas_brand_name() or 'Dashboard'
