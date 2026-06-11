@@ -1,0 +1,41 @@
+{% macro table(content, table_class) %}
+<table class="{{ table_class or '' }}" cellpadding="0" cellspacing="0" width="100%" align="center">
+	<tbody>
+		<tr>
+			<td align="center">
+				{{ content }}
+			</td>
+		</tr>
+	</tbody>
+</table>
+{% endmacro %}
+
+{% set brand_name = get_saas_brand_name(app_name) %}
+
+{% macro body() %}
+<table width="100%" cellspacing="0" cellpadding="0">
+	<tbody>
+		<tr>
+			<td align="center">
+				<div class="email-header-title">
+					Click on the button to log in to {{ brand_name|e }}
+				</div>
+				<div>The link will expire in {{ minutes }} minutes</div>
+			</td>
+		</tr>
+		<tr>
+			<td align="center">
+				<a href="{{ link or '#' }}" class="btn btn-primary" style="background-color: #171717; text-decoration: none; margin-top: 30px;">
+					Log In To {{ brand_name|e }}
+				</a>
+			</td>
+		</tr>
+	</tbody>
+</table>
+{% endmacro %}
+
+<div class="body-table with-container">
+	<div class="body-content">
+		{{ table(table(body(), 'email-body'), 'email-container') }}
+	</div>
+</div>

@@ -1,10 +1,12 @@
 from urllib.parse import urlparse
+from email.header import Header
+from email.utils import formataddr, parseaddr
 
 import frappe
 from frappe.utils import get_url
 
 
-DEFAULT_APP_NAME = "App"
+DEFAULT_APP_NAME = "ASH"
 
 
 def _get_website_settings():
@@ -16,13 +18,13 @@ def _get_website_settings():
 
 def get_saas_brand_name(app_name=None):
 	settings = _get_website_settings()
-	if settings and settings.app_name:
+	if settings and settings.app_name and settings.app_name.strip().lower() != "frappe":
 		return settings.app_name.strip()
 
-	if app_name:
+	if app_name and str(app_name).strip().lower() != "frappe":
 		return str(app_name).strip()
 
-	if getattr(frappe.local, "site", None):
+	if not (settings and settings.app_name) and not app_name and getattr(frappe.local, "site", None):
 		return frappe.local.site
 
 	return DEFAULT_APP_NAME
@@ -37,7 +39,7 @@ def brand_saas_text(text):
 		return text
 
 	brand_name = get_saas_brand_name()
-	return str(text).replace("Frappe Cloud", brand_name)
+	return str(text).replace("Frappe Cloud", brand_name).replace("Frappe", brand_name)
 
 
 def get_saas_brand_logo(logo=None):
@@ -75,8 +77,14 @@ def get_saas_url(path=None):
 
 def apply_saas_email_subject(email):
 	subject = brand_saas_text(email.subject)
-	if subject == email.subject:
+	if subject != email.subject:
+		email.subject = subject
+		email.set_header("Subject", subject)
+
+	_, sender_email = parseaddr(email.sender or "")
+	if not sender_email:
 		return
 
-	email.subject = subject
-	email.set_header("Subject", subject)
+	sender = formataddr((str(Header(get_saas_brand_name(), "utf-8")), sender_email))
+	email.sender = sender
+	email.set_header("From", sender)
