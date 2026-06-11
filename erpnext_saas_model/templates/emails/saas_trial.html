@@ -9,9 +9,9 @@
                         <td class="px-8 pt-10 pb-8 text-center text-gray-900">
                             <div>
                                 {% if logo_path %}
-                                <img src="{{ logo_path|e }}" alt="{{ brand_name|e }}" class="h-6 mx-auto">
+                                <img src="{{ logo_path|e }}" alt="{{ brand_name|e }}" class="h-8 mx-auto" style="height: 32px; max-height: 32px; width: auto;">
                                 {% elif logo_name %}
-                                <img embed="{{ logo_name }}" alt="Logo" class="h-6 mx-auto">
+                                <img embed="{{ logo_name }}" alt="Logo" class="h-8 mx-auto" style="height: 32px; max-height: 32px; width: auto;">
                                 {% endif %}
                             </div>
                         </td>

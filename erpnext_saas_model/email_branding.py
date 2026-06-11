@@ -32,6 +32,14 @@ def get_saas_team_name(app_name=None):
 	return f"Team {get_saas_brand_name(app_name)}"
 
 
+def brand_saas_text(text):
+	if text is None:
+		return text
+
+	brand_name = get_saas_brand_name()
+	return str(text).replace("Frappe Cloud", brand_name)
+
+
 def get_saas_brand_logo(logo=None):
 	settings = _get_website_settings()
 	settings_logo = (settings.app_logo if settings else "") or ""
@@ -63,3 +71,12 @@ def get_saas_url(path=None):
 		path = f"/{path}"
 
 	return get_url(path or None)
+
+
+def apply_saas_email_subject(email):
+	subject = brand_saas_text(email.subject)
+	if subject == email.subject:
+		return
+
+	email.subject = subject
+	email.set_header("Subject", subject)

@@ -6,7 +6,7 @@
 <td class="text-base leading-6 text-gray-900">
     <div class="p-8 bg-white from-markdown">
         <p class="mb-4 font-bold">
-            {{ subject }}
+            {{ brand_saas_text(subject)|e }}
         </p>
         <p class="mb-6">
             Unfortunately, we must bring to your attention that your site hosted on {{ get_saas_brand_name()|e }} has been temporarily <strong>suspended</strong> due to <strong>exceeding disk / database usage</strong> for consecutive 7 days.<br>

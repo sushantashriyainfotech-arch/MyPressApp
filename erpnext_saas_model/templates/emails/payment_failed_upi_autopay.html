@@ -5,7 +5,7 @@
 
 <td class="text-base leading-6 text-gray-900">
 	<div class="p-8 bg-white">
-		<p class="mb-4 font-bold">{{ subject }}</p>
+		<p class="mb-4 font-bold">{{ brand_saas_text(subject)|e }}</p>
 
 		{% if error_reason == "INSUFFICIENT_FUNDS" %}
 			<p>We attempted to auto-debit <strong>{{ amount }}</strong>{% if upi_vpa %} from your UPI account (<strong>{{ upi_vpa }}</strong>){% endif %} but the payment failed due to <strong>insufficient funds</strong>.</p>

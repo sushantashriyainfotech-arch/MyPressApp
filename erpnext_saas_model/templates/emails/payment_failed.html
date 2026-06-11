@@ -7,7 +7,7 @@
 	<div class="p-8 bg-white">
 		<p class="mb-4 font-bold">
 			{%- if subject -%}
-			{{ subject }}
+			{{ brand_saas_text(subject)|e }}
 			{%- else -%}
 			Payment of {{ amount }} for {{ get_saas_brand_name()|e }} was unsuccessful.
 			{%- endif -%}
