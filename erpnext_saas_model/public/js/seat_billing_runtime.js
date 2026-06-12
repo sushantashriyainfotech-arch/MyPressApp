@@ -6,6 +6,37 @@
 	console.log('[Seat Billing] Script initialized');
 	document.title = '[SB] ' + document.title;
 
+	function getDashboardBrandName() {
+		return (
+			(document.title || '')
+				.replace(/^\[SB\]\s*/i, '')
+				.replace(/\s*Dashboard$/i, '')
+				.trim() || 'Frappe Cloud'
+		);
+	}
+
+	function syncSidebarBrandName() {
+		const sidebarBrand = document.querySelector(
+			'aside button .text-base.font-medium.hidden.md\\:flex.text-ink-gray-9',
+		);
+		if (!sidebarBrand) return false;
+
+		sidebarBrand.textContent = getDashboardBrandName();
+		return true;
+	}
+
+	const sidebarBrandObserver = new MutationObserver(() => {
+		if (syncSidebarBrandName()) {
+			sidebarBrandObserver.disconnect();
+		}
+	});
+
+	sidebarBrandObserver.observe(document.documentElement, {
+		childList: true,
+		subtree: true,
+	});
+	syncSidebarBrandName();
+
 	// ─────────────────────────────────────────────────────────────────────────────
 	// State & constants
 	// ─────────────────────────────────────────────────────────────────────────────
