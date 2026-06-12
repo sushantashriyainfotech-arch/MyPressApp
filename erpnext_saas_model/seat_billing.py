@@ -142,6 +142,43 @@ def get_seat_change_log_for_reference(subscription: str, reference_at=None) -> d
 	return logs[0] if logs else None
 
 
+def _get_seat_change_logs_for_reference(subscription: str, reference_at=None) -> list[dict[str, Any]]:
+	"""Return all seat change logs that belong to the billing window for a reference time."""
+	if not reference_at:
+		reference_at = now_datetime()
+
+	if isinstance(reference_at, datetime):
+		billing_date = getdate(reference_at)
+	else:
+		billing_date = getdate(reference_at)
+
+	logs = frappe.get_all(
+		"Seat Change Log",
+		filters={
+			"subscription": subscription,
+			"billing_effective_from": billing_date,
+		},
+		fields=["name", "old_seats", "new_seats", "change_type", "access_updated_at", "billing_effective_from"],
+		order_by="access_updated_at asc, creation asc",
+	)
+	if logs:
+		return logs
+
+	latest = get_seat_change_log_for_reference(subscription, reference_at=reference_at)
+	return [latest] if latest else []
+
+
+def _format_seat_change_logs_description(change_logs, fallback_billable_seats: int | None = None) -> str:
+	"""Format the human-readable seat change reason shown in usage records and invoice rows."""
+	if change_logs:
+		old_seats = cint(_get_seat_change_log_value(change_logs[0], "old_seats") or 0)
+		new_seats = cint(_get_seat_change_log_value(change_logs[-1], "new_seats") or 0)
+		if old_seats or new_seats:
+			return f"Seats changed: {old_seats} -> {new_seats}"
+
+	return _format_seat_change_log_description(None, fallback_billable_seats=fallback_billable_seats)
+
+
 def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any]:
 	"""
 	Collects all data required for the Seat Billing Dashboard view.
@@ -1055,8 +1092,8 @@ def create_seat_usage_records(date=None):
 
 def _format_seat_change_log_description(change_log, fallback_billable_seats: int | None = None) -> str:
 	"""Format the human-readable seat change reason shown in invoice rows."""
-	old_seats = cint(getattr(change_log, "old_seats", 0) or 0)
-	new_seats = cint(getattr(change_log, "new_seats", 0) or 0)
+	old_seats = cint(_get_seat_change_log_value(change_log, "old_seats") or 0)
+	new_seats = cint(_get_seat_change_log_value(change_log, "new_seats") or 0)
 
 	if old_seats or new_seats:
 		return f"Seats changed: {old_seats} -> {new_seats}"
@@ -1066,6 +1103,14 @@ def _format_seat_change_log_description(change_log, fallback_billable_seats: int
 		return f"Seats changed: {seat_count}"
 
 	return "Seats changed"
+
+
+def _get_seat_change_log_value(change_log, fieldname: str, default=None):
+	if not change_log:
+		return default
+	if isinstance(change_log, dict):
+		return change_log.get(fieldname, default)
+	return getattr(change_log, fieldname, default)
 
 
 def get_seat_usage_record_remark(
@@ -1079,26 +1124,24 @@ def get_seat_usage_record_remark(
 	if reference_at is None:
 		reference_at = snapshot_taken_at
 
-	subscription_doc = None
+	subscription_name = None
 	if subscription:
-		subscription_doc = (
-			frappe.get_cached_doc("Subscription", subscription)
-			if isinstance(subscription, str)
-			else frappe.get_cached_doc("Subscription", subscription.get("name"))
-		)
+		subscription_name = subscription if isinstance(subscription, str) else subscription.get("name")
 
-	change_log = None
-	if seat_change_log:
+	change_logs = []
+	if subscription_name:
+		change_logs = _get_seat_change_logs_for_reference(subscription_name, reference_at=reference_at)
+	elif seat_change_log:
 		change_log = (
 			seat_change_log
 			if isinstance(seat_change_log, dict)
 			else frappe.get_cached_doc("Seat Change Log", seat_change_log).as_dict()
 		)
-	elif subscription_doc:
-		change_log = get_seat_change_log_for_reference(subscription_doc.name, reference_at=reference_at)
+		if change_log:
+			change_logs = [change_log]
 
-	if change_log:
-		return _format_seat_change_log_description(change_log, fallback_billable_seats=fallback_billable_seats)
+	if change_logs:
+		return _format_seat_change_logs_description(change_logs, fallback_billable_seats=fallback_billable_seats)
 
 	if fallback_billable_seats is not None:
 		return _format_seat_change_log_description(None, fallback_billable_seats=fallback_billable_seats)

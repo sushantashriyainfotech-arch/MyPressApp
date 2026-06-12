@@ -22,10 +22,10 @@ class Invoice(PressInvoice):
 		return is_seat_based_plan(plan)
 
 	def _get_seat_usage_description(self, usage_record) -> str:
-		if getattr(usage_record, "seat_change_log", None):
-			return get_seat_usage_record_remark(seat_change_log=usage_record.seat_change_log)
 		if getattr(usage_record, "remark", None):
 			return usage_record.remark
+		if getattr(usage_record, "seat_change_log", None):
+			return get_seat_usage_record_remark(seat_change_log=usage_record.seat_change_log)
 
 		return get_seat_usage_record_remark(
 			subscription=getattr(usage_record, "subscription", None),

@@ -12,6 +12,9 @@ from erpnext_saas_model.doctype.invoice.invoice import Invoice as Invoice
 from erpnext_saas_model.doctype.usage_record import usage_record as usage_record_module
 from erpnext_saas_model.doctype.usage_record.usage_record import UsageRecord
 from erpnext_saas_model.patches.v0_0_2 import backfill_seat_usage_record_descriptions as backfill_patch_module
+from erpnext_saas_model.patches.v0_0_3 import (
+	backfill_seat_usage_record_window_descriptions as window_backfill_patch_module,
+)
 
 
 class TestSeatBillingHelpers(FrappeTestCase):
@@ -81,8 +84,47 @@ class TestSeatBillingHelpers(FrappeTestCase):
 					subscription="SUB-001",
 					snapshot_taken_at=datetime(2026, 5, 29, 0, 0, 0),
 					fallback_billable_seats=5,
+			),
+			"Seats changed: 2 -> 5",
+		)
+
+	def test_seat_usage_record_remark_aggregates_same_window_changes(self):
+		billing_date = datetime(2026, 5, 29, 18, 0, 0).date()
+		logs = [
+			SimpleNamespace(
+				name="SEAT-LOG-001",
+				old_seats=5,
+				new_seats=7,
+				change_type="Increase",
+				billing_effective_from=billing_date,
+			),
+			SimpleNamespace(
+				name="SEAT-LOG-002",
+				old_seats=7,
+				new_seats=8,
+				change_type="Increase",
+				billing_effective_from=billing_date,
+			),
+		]
+
+		def fake_get_all(doctype, filters=None, fields=None, pluck=None, order_by=None, limit=None):
+			if doctype == "Seat Change Log" and filters and filters.get("subscription") == "SUB-001":
+				if filters.get("billing_effective_from") == billing_date:
+					return logs
+			if doctype == "Subscription":
+				return [SimpleNamespace(name="SUB-001")]
+			return []
+
+		with patch.object(seat_billing_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			seat_billing_module.frappe, "get_cached_doc", return_value=SimpleNamespace(name="SUB-001")
+		):
+			self.assertEqual(
+				seat_billing_module.get_seat_usage_record_remark(
+					subscription="SUB-001",
+					reference_at=datetime(2026, 5, 29, 18, 0, 0),
+					fallback_billable_seats=8,
 				),
-				"Seats changed: 2 -> 5",
+				"Seats changed: 5 -> 8",
 			)
 
 	def test_seat_usage_record_description_is_copied_to_invoice_item(self):
@@ -127,6 +169,25 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		self.assertEqual(invoice.items[0].description, "Seats changed: 2 -> 5")
 		self.assertEqual(invoice.items[0].usage_record, usage_record.name)
 		self.assertEqual(invoice.items[0].seat_change_log, usage_record.seat_change_log)
+
+	def test_invoice_prefers_usage_record_remark_over_seat_change_log(self):
+		invoice = Invoice.__new__(Invoice)
+		invoice.type = "Subscription"
+		invoice.period_start = "2026-05-01"
+		invoice.period_end = "2026-05-31"
+		invoice.billable_seats = 0
+
+		usage_record = SimpleNamespace(
+			remark="Seats changed: 5 -> 8",
+			seat_change_log="SEAT-LOG-002",
+			snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
+			date="2026-05-29",
+			subscription="SUB-001",
+			billable_seats=8,
+		)
+
+		with patch.object(invoice_module, "get_seat_usage_record_remark", side_effect=AssertionError("unexpected call")):
+			self.assertEqual(invoice._get_seat_usage_description(usage_record), "Seats changed: 5 -> 8")
 
 	def test_backfill_patch_sets_missing_usage_record_remarks(self):
 		captured = []
@@ -265,6 +326,100 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
 		):
 			backfill_patch_module.backfill_invoice_item_descriptions(["PLAN-001"])
+
+	def test_window_backfill_patch_uses_aggregated_window_remark(self):
+		captured = []
+		billing_date = datetime(2026, 5, 29, 18, 0, 0).date()
+
+		def fake_get_all(doctype, filters=None, fields=None, pluck=None, order_by=None, limit=None):
+			if doctype == "Site Plan":
+				return ["PLAN-001"]
+			if doctype == "Usage Record":
+				if filters and filters.get("plan") == ("in", ["PLAN-001"]):
+					return [
+						SimpleNamespace(
+							name="UR-001",
+							remark=None,
+							billable_seats=8,
+							subscription="SUB-001",
+							date="2026-05-29",
+							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
+							seat_change_log=None,
+						)
+					]
+				if filters and filters.get("invoice") == "INV-001":
+					return [
+						SimpleNamespace(
+							name="UR-001",
+							subscription="SUB-001",
+							date="2026-05-29",
+							billable_seats=8,
+							remark=None,
+							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
+							seat_change_log=None,
+						)
+					]
+				return []
+			if doctype == "Invoice Item":
+				return [
+					SimpleNamespace(
+						name="ITEM-001",
+						parent="INV-001",
+						document_type="Site",
+						document_name="site-001",
+						plan="PLAN-001",
+						rate=8.33,
+						description="Seats changed: 7 -> 8",
+						usage_record="UR-001",
+					)
+				]
+			if doctype == "Seat Change Log":
+				if filters and filters.get("subscription") == "SUB-001" and filters.get("billing_effective_from") == billing_date:
+					return [
+						SimpleNamespace(
+							name="SEAT-LOG-001",
+							old_seats=5,
+							new_seats=7,
+							change_type="Increase",
+							billing_effective_from=billing_date,
+						),
+						SimpleNamespace(
+							name="SEAT-LOG-002",
+							old_seats=7,
+							new_seats=8,
+							change_type="Increase",
+							billing_effective_from=billing_date,
+						),
+					]
+				return []
+			raise AssertionError(f"Unexpected doctype: {doctype}")
+
+		def fake_set_value(doctype, name, fieldname, value, update_modified=False):
+			captured.append((doctype, name, fieldname, value, update_modified))
+
+		with patch.object(window_backfill_patch_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			window_backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
+		), patch.object(
+			window_backfill_patch_module.frappe,
+			"get_doc",
+			return_value=SimpleNamespace(
+				name="UR-001",
+				subscription="SUB-001",
+				date="2026-05-29",
+				billable_seats=8,
+				remark=None,
+				snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
+			),
+		):
+			window_backfill_patch_module.execute()
+
+		self.assertEqual(
+			captured,
+			[
+				("Usage Record", "UR-001", "remark", "Seats changed: 5 -> 8", False),
+				("Invoice Item", "ITEM-001", "description", "Seats changed: 5 -> 8", False),
+			],
+		)
 
 		self.assertEqual(
 			captured,
