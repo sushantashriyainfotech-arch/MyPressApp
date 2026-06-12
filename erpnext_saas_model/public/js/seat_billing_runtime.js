@@ -17,7 +17,7 @@
 
 	function syncSidebarBrandName() {
 		const sidebarBrand = document.querySelector(
-			'aside button .text-base.font-medium.hidden.md\\:flex.text-ink-gray-9',
+			'button[aria-haspopup="menu"] .text-base.font-medium.leading-none.text-gray-900',
 		);
 		if (!sidebarBrand) return false;
 
