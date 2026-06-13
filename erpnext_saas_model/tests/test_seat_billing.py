@@ -227,6 +227,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			seat_billing_module.log_seat_change("SUB-001", old_seats=5, new_seats=7, access_updated_at=datetime(2026, 5, 1, 12, 0, 0))
 
 		self.assertEqual(captured["team"], "TEAM-001")
+		self.assertEqual(captured["currency"], "INR")
 		self.assertEqual(captured["proration_amount"], 62.0)
 
 	def test_seat_change_log_backfill_sets_team_and_proration_amount(self):
@@ -289,6 +290,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			captured,
 			[
 				("Seat Change Log", "SEAT-LOG-001", "team", "TEAM-001", False),
+				("Seat Change Log", "SEAT-LOG-001", "currency", "INR", False),
 				("Seat Change Log", "SEAT-LOG-001", "proration_amount", 62.0, False),
 			],
 		)

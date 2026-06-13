@@ -15,11 +15,13 @@ def execute():
 		fields=[
 			"name",
 			"subscription",
+			"team",
 			"old_seats",
 			"new_seats",
 			"access_updated_at",
 			"billing_effective_from",
 			"proration_amount",
+			"currency",
 		],
 		order_by="creation asc",
 	)
@@ -36,6 +38,26 @@ def execute():
 					team,
 					update_modified=False,
 			)
+		currency = getattr(seat_change_log, "currency", None)
+		if not currency and team:
+			currency = get_team_currency(team)
+			frappe.db.set_value(
+				"Seat Change Log",
+				seat_change_log.name,
+				"currency",
+				currency,
+				update_modified=False,
+			)
+		elif currency:
+			currency = currency.upper()
+			if currency != getattr(seat_change_log, "currency", None):
+				frappe.db.set_value(
+					"Seat Change Log",
+					seat_change_log.name,
+					"currency",
+					currency,
+					update_modified=False,
+				)
 
 		subscription = getattr(seat_change_log, "subscription", None)
 		if not subscription:
@@ -96,6 +118,12 @@ def ensure_team_field():
 		},
 		ignore_validate=True,
 	)
+
+
+def get_team_currency(team: str | None) -> str:
+	if not team:
+		return "USD"
+	return (frappe.db.get_value("Team", team, "currency") or "USD").upper()
 
 
 def ensure_standard_filters():

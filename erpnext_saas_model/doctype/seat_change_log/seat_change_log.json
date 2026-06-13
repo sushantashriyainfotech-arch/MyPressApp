@@ -16,6 +16,7 @@
 		"billing_effective_from",
 		"changed_by",
 		"change_date",
+		"currency",
 		"proration_amount"
 	],
 	"fields": [
@@ -91,10 +92,16 @@
 			"reqd": 1
 		},
 		{
+			"fieldname": "currency",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Currency"
+		},
+		{
 			"fieldname": "proration_amount",
 			"fieldtype": "Currency",
 			"label": "Proration Amount",
-			"options": "INR"
+			"options": "currency"
 		}
 	],
 	"issingle": 0,
