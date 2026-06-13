@@ -9,6 +9,7 @@ from erpnext_saas_model.seat_billing import _calculate_seat_change_proration_amo
 
 def execute():
 	ensure_team_field()
+	ensure_standard_filters()
 	seat_change_logs = frappe.get_all(
 		"Seat Change Log",
 		fields=[
@@ -55,7 +56,7 @@ def execute():
 			"Seat Change Log",
 			seat_change_log.name,
 			"proration_amount",
-		flt(proration_amount, 2),
+			flt(proration_amount, 2),
 			update_modified=False,
 		)
 
@@ -94,3 +95,29 @@ def ensure_team_field():
 		},
 		ignore_validate=True,
 	)
+
+
+def ensure_standard_filters():
+	for fieldname in (
+		"subscription",
+		"team",
+		"site",
+		"change_type",
+		"access_updated_at",
+		"billing_effective_from",
+		"changed_by",
+	):
+		ensure_docfield_flag("Seat Change Log", fieldname, "in_standard_filter", 1)
+
+	frappe.clear_cache(doctype="Seat Change Log")
+
+
+def ensure_docfield_flag(doctype: str, fieldname: str, flag: str, value: int) -> None:
+	docfield_name = frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name")
+	if not docfield_name:
+		return
+
+	if frappe.db.get_value("DocField", docfield_name, flag) == value:
+		return
+
+	frappe.db.set_value("DocField", docfield_name, flag, value, update_modified=False)
