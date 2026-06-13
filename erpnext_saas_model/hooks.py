@@ -195,7 +195,7 @@ doc_events = {
 # }
 scheduler_events = {
 	"cron": {
-		"0 18 * * *": [
+		"0 0 * * *": [
 			"erpnext_saas_model.seat_billing.create_seat_usage_records",
 		],
 	},
