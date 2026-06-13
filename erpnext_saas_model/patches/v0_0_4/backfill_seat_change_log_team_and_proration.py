@@ -63,6 +63,21 @@ def execute():
 def ensure_team_field():
 	custom_field_name = frappe.db.get_value("Custom Field", {"dt": "Seat Change Log", "fieldname": "team"})
 	if custom_field_name:
+		custom_field = frappe.get_doc("Custom Field", custom_field_name)
+		changed = False
+		for key, value in {
+			"label": "Team",
+			"fieldtype": "Link",
+			"options": "Team",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+		}.items():
+			if getattr(custom_field, key, None) != value:
+				setattr(custom_field, key, value)
+				changed = True
+		if changed:
+			custom_field.save(ignore_permissions=True)
 		return
 
 	create_custom_field(
@@ -74,6 +89,7 @@ def ensure_team_field():
 			"options": "Team",
 			"reqd": 1,
 			"in_list_view": 1,
+			"in_standard_filter": 1,
 			"insert_after": "subscription",
 		},
 		ignore_validate=True,

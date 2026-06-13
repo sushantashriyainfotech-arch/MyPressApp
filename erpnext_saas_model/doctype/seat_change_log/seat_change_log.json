@@ -25,7 +25,8 @@
 			"label": "Subscription",
 			"options": "Subscription",
 			"reqd": 1,
-			"in_list_view": 1
+			"in_list_view": 1,
+			"in_standard_filter": 1
 		},
 		{
 			"fieldname": "team",
@@ -33,7 +34,8 @@
 			"label": "Team",
 			"options": "Team",
 			"reqd": 1,
-			"in_list_view": 1
+			"in_list_view": 1,
+			"in_standard_filter": 1
 		},
 		{
 			"fieldname": "site",
@@ -41,7 +43,8 @@
 			"label": "Site",
 			"options": "Site",
 			"reqd": 1,
-			"in_list_view": 1
+			"in_list_view": 1,
+			"in_standard_filter": 1
 		},
 		{
 			"fieldname": "old_seats",
@@ -60,7 +63,8 @@
 			"fieldtype": "Select",
 			"label": "Change Type",
 			"options": "Increase\nDecrease",
-			"reqd": 1
+			"reqd": 1,
+			"in_standard_filter": 1
 		},
 		{
 			"fieldname": "access_updated_at",
