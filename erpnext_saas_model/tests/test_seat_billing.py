@@ -205,6 +205,11 @@ class TestSeatBillingHelpers(FrappeTestCase):
 					document_name="SITE-001",
 					plan_type="Site Plan",
 					plan="PLAN-001",
+					price_per_seat=999,
+					price_inr=31,
+					price_usd=0,
+					total_amount=31,
+					billable_seats=1,
 				)
 			if doctype == "Site Plan":
 				return SimpleNamespace(name=name, billing_type="Seat Based", price_inr=31, price_usd=0)
@@ -216,7 +221,9 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		with patch.object(seat_billing_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
 			seat_billing_module.frappe, "get_doc", side_effect=fake_get_doc
-		), patch.object(seat_billing_module.frappe.session, "user", "Administrator"):
+		), patch.object(seat_billing_module.frappe.db, "get_value", return_value="INR"), patch.object(
+			seat_billing_module.frappe.session, "user", "Administrator"
+		):
 			seat_billing_module.log_seat_change("SUB-001", old_seats=5, new_seats=7, access_updated_at=datetime(2026, 5, 1, 12, 0, 0))
 
 		self.assertEqual(captured["team"], "TEAM-001")
@@ -236,12 +243,14 @@ class TestSeatBillingHelpers(FrappeTestCase):
 						new_seats=7,
 						access_updated_at=datetime(2026, 5, 1, 12, 0, 0),
 						billing_effective_from=datetime(2026, 5, 1, 0, 0, 0).date(),
-						proration_amount=None,
+						proration_amount=0.0,
 					)
 				]
 			return []
 
 		def fake_get_value(doctype, name, fieldname):
+			if doctype == "Team" and fieldname == "currency":
+				return "INR"
 			if doctype == "Subscription" and fieldname == "team":
 				return "TEAM-001"
 			raise AssertionError(f"Unexpected get_value: {doctype} {name} {fieldname}")
@@ -256,6 +265,11 @@ class TestSeatBillingHelpers(FrappeTestCase):
 					document_name="SITE-001",
 					plan_type="Site Plan",
 					plan="PLAN-001",
+					price_per_seat=999,
+					price_inr=31,
+					price_usd=0,
+					total_amount=31,
+					billable_seats=1,
 				)
 			if doctype == "Site Plan":
 				return SimpleNamespace(name=name, billing_type="Seat Based", price_inr=31, price_usd=0)
@@ -268,7 +282,7 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			seat_change_log_backfill_patch_module.frappe, "get_value", side_effect=fake_get_value
 		), patch.object(seat_change_log_backfill_patch_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
 			seat_change_log_backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
-		):
+		), patch.object(seat_change_log_backfill_patch_module.frappe.db, "get_value", return_value="INR"):
 			seat_change_log_backfill_patch_module.execute()
 
 		self.assertEqual(

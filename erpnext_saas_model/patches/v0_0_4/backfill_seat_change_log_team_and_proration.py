@@ -35,10 +35,7 @@ def execute():
 					"team",
 					team,
 					update_modified=False,
-				)
-
-		if getattr(seat_change_log, "proration_amount", None) not in (None, ""):
-			continue
+			)
 
 		subscription = getattr(seat_change_log, "subscription", None)
 		if not subscription:
@@ -52,6 +49,10 @@ def execute():
 			access_updated_at=getattr(seat_change_log, "access_updated_at", None),
 			billing_effective_from=getattr(seat_change_log, "billing_effective_from", None),
 		)
+		current_proration = flt(getattr(seat_change_log, "proration_amount", 0) or 0, 2)
+		if current_proration == flt(proration_amount, 2):
+			continue
+
 		frappe.db.set_value(
 			"Seat Change Log",
 			seat_change_log.name,

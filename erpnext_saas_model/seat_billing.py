@@ -244,7 +244,13 @@ def _calculate_seat_change_proration_amount(
 		return 0.0
 
 	team_currency = get_team_currency(getattr(subscription_doc, "team", None))
-	selected_price = get_plan_price_for_currency(plan, team_currency)
+	if team_currency == "INR":
+		selected_price = flt(getattr(subscription_doc, "price_inr", 0) or getattr(plan, "price_inr", 0) or 0, 2)
+	else:
+		selected_price = flt(getattr(subscription_doc, "price_usd", 0) or getattr(plan, "price_usd", 0) or 0, 2)
+	if not selected_price:
+		return 0.0
+
 	effective_from = getdate(billing_effective_from or get_billing_effective_from(access_updated_at or now_datetime()))
 	last_day = frappe.utils.get_last_day(effective_from)
 	days_in_month = last_day.day or 30
