@@ -100,15 +100,29 @@ def get_seat_plans() -> list[dict[str, Any]]:
 	)
 
 
-def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, Any]]:
+def get_seat_change_logs(
+	subscription: str | None = None,
+	team: str | None = None,
+	limit: int = 10,
+) -> list[dict[str, Any]]:
 	"""
 	Fetches recent audit logs for seat count changes on a specific subscription.
 	"""
+	if not subscription and not team:
+		return []
+
+	filters = {}
+	if subscription:
+		filters["subscription"] = subscription
+	if team:
+		filters["team"] = team
 	return frappe.get_all(
 		"Seat Change Log",
-		filters={"subscription": subscription},
+		filters=filters,
 		fields=[
 			"name",
+			"subscription",
+			"team",
 			"old_seats",
 			"new_seats",
 			"change_type",
@@ -122,27 +136,47 @@ def get_seat_change_logs(subscription: str, limit: int = 10) -> list[dict[str, A
 	)
 
 
-def get_seat_change_log_for_reference(subscription: str, reference_at=None) -> dict[str, Any] | None:
+def get_seat_change_log_for_reference(
+	subscription: str | None = None,
+	reference_at=None,
+	team: str | None = None,
+) -> dict[str, Any] | None:
 	"""Return the latest seat change log that applies at a specific point in time."""
+	if not subscription and not team:
+		return None
+
 	if not reference_at:
 		reference_at = now_datetime()
 	if not isinstance(reference_at, datetime):
 		reference_at = datetime.combine(getdate(reference_at), time(23, 59, 59))
 
+	filters = {"access_updated_at": ("<=", reference_at)}
+	if subscription:
+		filters["subscription"] = subscription
+	if team:
+		filters["team"] = team
+
 	logs = frappe.get_all(
 		"Seat Change Log",
-		filters={
-			"subscription": subscription,
-			"access_updated_at": ("<=", reference_at),
-		},
-		fields=["name", "old_seats", "new_seats", "change_type", "access_updated_at"],
+		filters=filters,
+		fields=["name", "subscription", "team", "old_seats", "new_seats", "change_type", "access_updated_at"],
 		order_by="access_updated_at desc, creation desc",
 		limit=1,
 	)
+	if logs:
+		return logs[0]
+
+	if team:
+		return get_seat_change_log_for_reference(subscription, reference_at=reference_at, team=None)
+
 	return logs[0] if logs else None
 
 
-def _get_seat_change_logs_for_reference(subscription: str, reference_at=None) -> list[dict[str, Any]]:
+def _get_seat_change_logs_for_reference(
+	subscription: str,
+	reference_at=None,
+	team: str | None = None,
+) -> list[dict[str, Any]]:
 	"""Return all seat change logs that belong to the billing window for a reference time."""
 	if not reference_at:
 		reference_at = now_datetime()
@@ -156,15 +190,27 @@ def _get_seat_change_logs_for_reference(subscription: str, reference_at=None) ->
 		"Seat Change Log",
 		filters={
 			"subscription": subscription,
+			**({"team": team} if team else {}),
 			"billing_effective_from": billing_date,
 		},
-		fields=["name", "old_seats", "new_seats", "change_type", "access_updated_at", "billing_effective_from"],
+		fields=[
+			"name",
+			"subscription",
+			"team",
+			"old_seats",
+			"new_seats",
+			"change_type",
+			"access_updated_at",
+			"billing_effective_from",
+		],
 		order_by="access_updated_at asc, creation asc",
 	)
 	if logs:
 		return logs
 
-	latest = get_seat_change_log_for_reference(subscription, reference_at=reference_at)
+	latest = get_seat_change_log_for_reference(subscription, reference_at=reference_at, team=team)
+	if not latest and team:
+		latest = get_seat_change_log_for_reference(subscription, reference_at=reference_at, team=None)
 	return [latest] if latest else []
 
 
@@ -177,6 +223,34 @@ def _format_seat_change_logs_description(change_logs, fallback_billable_seats: i
 			return f"Seats changed: {old_seats} -> {new_seats}"
 
 	return _format_seat_change_log_description(None, fallback_billable_seats=fallback_billable_seats)
+
+
+def _calculate_seat_change_proration_amount(
+	subscription_doc,
+	old_seats: int,
+	new_seats: int,
+	access_updated_at: datetime | None = None,
+	billing_effective_from=None,
+) -> float:
+	"""Return the signed proration amount for a seat change within the current billing month."""
+	old_seats = cint(old_seats or 0)
+	new_seats = cint(new_seats or 0)
+	seat_delta = new_seats - old_seats
+	if not seat_delta:
+		return 0.0
+
+	plan = frappe.get_cached_doc(subscription_doc.plan_type, subscription_doc.plan)
+	if not is_seat_based_plan(plan):
+		return 0.0
+
+	team_currency = get_team_currency(getattr(subscription_doc, "team", None))
+	selected_price = get_plan_price_for_currency(plan, team_currency)
+	effective_from = getdate(billing_effective_from or get_billing_effective_from(access_updated_at or now_datetime()))
+	last_day = frappe.utils.get_last_day(effective_from)
+	days_in_month = last_day.day or 30
+	remaining_days = (last_day - effective_from).days + 1
+	daily_rate = flt(selected_price / days_in_month, 2)
+	return flt(seat_delta * daily_rate * remaining_days, 2)
 
 
 def get_seat_billing_dashboard(subscription: str | None = None) -> dict[str, Any]:
@@ -1017,6 +1091,14 @@ def log_seat_change(
 	access_updated_at = access_updated_at or now_datetime()
 	billing_effective_from = billing_effective_from or get_billing_effective_from(access_updated_at)
 	subscription_doc = frappe.get_cached_doc("Subscription", subscription)
+	if proration_amount is None:
+		proration_amount = _calculate_seat_change_proration_amount(
+			subscription_doc,
+			old_seats=old_seats,
+			new_seats=new_seats,
+			access_updated_at=access_updated_at,
+			billing_effective_from=billing_effective_from,
+		)
 	site_name = subscription_doc.site or (
 		subscription_doc.document_name if subscription_doc.document_type == "Site" else None
 	)
@@ -1024,6 +1106,7 @@ def log_seat_change(
 		{
 			"doctype": "Seat Change Log",
 			"subscription": subscription,
+			"team": getattr(subscription_doc, "team", None),
 			"site": site_name,
 			"old_seats": cint(old_seats),
 			"new_seats": cint(new_seats),
@@ -1115,6 +1198,7 @@ def _get_seat_change_log_value(change_log, fieldname: str, default=None):
 
 def get_seat_usage_record_remark(
 	subscription: str | dict[str, Any] | None = None,
+	team: str | None = None,
 	reference_at=None,
 	snapshot_taken_at=None,
 	seat_change_log: str | dict[str, Any] | None = None,
@@ -1127,10 +1211,11 @@ def get_seat_usage_record_remark(
 	subscription_name = None
 	if subscription:
 		subscription_name = subscription if isinstance(subscription, str) else subscription.get("name")
+		team = team or (subscription.get("team") if isinstance(subscription, dict) else None)
 
 	change_logs = []
 	if subscription_name:
-		change_logs = _get_seat_change_logs_for_reference(subscription_name, reference_at=reference_at)
+		change_logs = _get_seat_change_logs_for_reference(subscription_name, reference_at=reference_at, team=team)
 	elif seat_change_log:
 		change_log = (
 			seat_change_log
@@ -1218,9 +1303,14 @@ def _insert_seat_usage_record(subscription, date):
 	billable_seats = cint(subscription.billable_seats or 0)
 	seat_amount = flt(selected_price * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
-	seat_change_log = get_seat_change_log_for_reference(subscription.name, reference_at=snapshot_taken_at)
+	seat_change_log = get_seat_change_log_for_reference(
+		subscription.name,
+		reference_at=snapshot_taken_at,
+		team=subscription.team,
+	)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
+		team=subscription.team,
 		reference_at=snapshot_taken_at,
 		seat_change_log=seat_change_log,
 		fallback_billable_seats=billable_seats,

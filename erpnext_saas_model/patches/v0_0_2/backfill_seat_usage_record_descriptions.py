@@ -69,16 +69,28 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=["name", "remark", "billable_seats", "subscription", "date", "snapshot_taken_at", "seat_change_log"],
+		fields=[
+			"name",
+			"remark",
+			"billable_seats",
+			"subscription",
+			"team",
+			"date",
+			"snapshot_taken_at",
+			"seat_change_log",
+		],
 		order_by="creation asc",
 	)
 
 	for usage_record in usage_records:
 		seat_change_log = usage_record.seat_change_log or get_seat_change_log_for_reference(
-			usage_record.subscription, usage_record.date
+			usage_record.subscription,
+			usage_record.date,
+			team=getattr(usage_record, "team", None),
 		)
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
+			team=getattr(usage_record, "team", None),
 			reference_at=usage_record.date,
 			seat_change_log=seat_change_log,
 			fallback_billable_seats=usage_record.billable_seats,
@@ -132,9 +144,14 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
+			team=getattr(usage_record, "team", None),
 			reference_at=usage_record.date,
 			seat_change_log=usage_record.seat_change_log
-			or get_seat_change_log_for_reference(usage_record.subscription, usage_record.date),
+			or get_seat_change_log_for_reference(
+				usage_record.subscription,
+				usage_record.date,
+				team=getattr(usage_record, "team", None),
+			),
 			fallback_billable_seats=usage_record.billable_seats,
 		)
 		frappe.db.set_value(

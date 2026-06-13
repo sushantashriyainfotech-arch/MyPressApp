@@ -15,6 +15,9 @@ from erpnext_saas_model.patches.v0_0_2 import backfill_seat_usage_record_descrip
 from erpnext_saas_model.patches.v0_0_3 import (
 	backfill_seat_usage_record_window_descriptions as window_backfill_patch_module,
 )
+from erpnext_saas_model.patches.v0_0_4 import (
+	backfill_seat_change_log_team_and_proration as seat_change_log_backfill_patch_module,
+)
 
 
 class TestSeatBillingHelpers(FrappeTestCase):
@@ -188,6 +191,93 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		with patch.object(invoice_module, "get_seat_usage_record_remark", side_effect=AssertionError("unexpected call")):
 			self.assertEqual(invoice._get_seat_usage_description(usage_record), "Seats changed: 5 -> 8")
+
+	def test_log_seat_change_sets_team_and_proration_amount(self):
+		captured = {}
+
+		def fake_get_cached_doc(doctype, name):
+			if doctype == "Subscription":
+				return SimpleNamespace(
+					name=name,
+					team="TEAM-001",
+					site="SITE-001",
+					document_type="Site",
+					document_name="SITE-001",
+					plan_type="Site Plan",
+					plan="PLAN-001",
+				)
+			if doctype == "Site Plan":
+				return SimpleNamespace(name=name, billing_type="Seat Based", price_inr=31, price_usd=0)
+			raise AssertionError(f"Unexpected cached doc: {doctype} {name}")
+
+		def fake_get_doc(data):
+			captured.update(data)
+			return SimpleNamespace(insert=lambda ignore_permissions=False: None)
+
+		with patch.object(seat_billing_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
+			seat_billing_module.frappe, "get_doc", side_effect=fake_get_doc
+		), patch.object(seat_billing_module.frappe.session, "user", "Administrator"):
+			seat_billing_module.log_seat_change("SUB-001", old_seats=5, new_seats=7, access_updated_at=datetime(2026, 5, 1, 12, 0, 0))
+
+		self.assertEqual(captured["team"], "TEAM-001")
+		self.assertEqual(captured["proration_amount"], 62.0)
+
+	def test_seat_change_log_backfill_sets_team_and_proration_amount(self):
+		captured = []
+
+		def fake_get_all(doctype, filters=None, fields=None, pluck=None, order_by=None, limit=None):
+			if doctype == "Seat Change Log":
+				return [
+					SimpleNamespace(
+						name="SEAT-LOG-001",
+						subscription="SUB-001",
+						team=None,
+						old_seats=5,
+						new_seats=7,
+						access_updated_at=datetime(2026, 5, 1, 12, 0, 0),
+						billing_effective_from=datetime(2026, 5, 1, 0, 0, 0).date(),
+						proration_amount=None,
+					)
+				]
+			return []
+
+		def fake_get_value(doctype, name, fieldname):
+			if doctype == "Subscription" and fieldname == "team":
+				return "TEAM-001"
+			raise AssertionError(f"Unexpected get_value: {doctype} {name} {fieldname}")
+
+		def fake_get_cached_doc(doctype, name):
+			if doctype == "Subscription":
+				return SimpleNamespace(
+					name=name,
+					team="TEAM-001",
+					site="SITE-001",
+					document_type="Site",
+					document_name="SITE-001",
+					plan_type="Site Plan",
+					plan="PLAN-001",
+				)
+			if doctype == "Site Plan":
+				return SimpleNamespace(name=name, billing_type="Seat Based", price_inr=31, price_usd=0)
+			raise AssertionError(f"Unexpected cached doc: {doctype} {name}")
+
+		def fake_set_value(doctype, name, fieldname, value, update_modified=False):
+			captured.append((doctype, name, fieldname, value, update_modified))
+
+		with patch.object(seat_change_log_backfill_patch_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			seat_change_log_backfill_patch_module.frappe, "get_value", side_effect=fake_get_value
+		), patch.object(seat_change_log_backfill_patch_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
+			seat_change_log_backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
+		):
+			seat_change_log_backfill_patch_module.execute()
+
+		self.assertEqual(
+			captured,
+			[
+				("Seat Change Log", "SEAT-LOG-001", "team", "TEAM-001", False),
+				("Seat Change Log", "SEAT-LOG-001", "proration_amount", 62.0, False),
+			],
+		)
 
 	def test_backfill_patch_sets_missing_usage_record_remarks(self):
 		captured = []

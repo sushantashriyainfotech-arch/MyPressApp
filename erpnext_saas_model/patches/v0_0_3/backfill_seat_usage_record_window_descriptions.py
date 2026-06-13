@@ -26,13 +26,23 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=["name", "remark", "billable_seats", "subscription", "date", "snapshot_taken_at", "seat_change_log"],
+		fields=[
+			"name",
+			"remark",
+			"billable_seats",
+			"subscription",
+			"team",
+			"date",
+			"snapshot_taken_at",
+			"seat_change_log",
+		],
 		order_by="creation asc",
 	)
 
 	for usage_record in usage_records:
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
+			team=getattr(usage_record, "team", None),
 			reference_at=getattr(usage_record, "snapshot_taken_at", None) or usage_record.date,
 			fallback_billable_seats=usage_record.billable_seats,
 		)
@@ -61,6 +71,7 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 			"rate",
 			"description",
 			"usage_record",
+			"team",
 		],
 		order_by="creation asc",
 	)
@@ -72,6 +83,7 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 
 		remark = getattr(usage_record, "remark", None) or get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
+			team=getattr(usage_record, "team", None),
 			reference_at=getattr(usage_record, "snapshot_taken_at", None) or usage_record.date,
 			fallback_billable_seats=usage_record.billable_seats,
 		)

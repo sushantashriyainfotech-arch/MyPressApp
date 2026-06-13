@@ -7,6 +7,7 @@
 	"editable_grid": 0,
 	"field_order": [
 		"subscription",
+		"team",
 		"site",
 		"old_seats",
 		"new_seats",
@@ -23,6 +24,14 @@
 			"fieldtype": "Link",
 			"label": "Subscription",
 			"options": "Subscription",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "team",
+			"fieldtype": "Link",
+			"label": "Team",
+			"options": "Team",
 			"reqd": 1,
 			"in_list_view": 1
 		},

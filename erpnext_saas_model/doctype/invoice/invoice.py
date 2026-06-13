@@ -25,10 +25,14 @@ class Invoice(PressInvoice):
 		if getattr(usage_record, "remark", None):
 			return usage_record.remark
 		if getattr(usage_record, "seat_change_log", None):
-			return get_seat_usage_record_remark(seat_change_log=usage_record.seat_change_log)
+			return get_seat_usage_record_remark(
+				seat_change_log=usage_record.seat_change_log,
+				team=getattr(usage_record, "team", None),
+			)
 
 		return get_seat_usage_record_remark(
 			subscription=getattr(usage_record, "subscription", None),
+			team=getattr(usage_record, "team", None),
 			reference_at=getattr(usage_record, "snapshot_taken_at", None) or getattr(usage_record, "date", None),
 			fallback_billable_seats=getattr(usage_record, "billable_seats", None),
 		)
