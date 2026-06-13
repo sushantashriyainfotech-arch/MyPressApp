@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 from frappe.utils import cint, flt
 
 from erpnext_saas_model.seat_billing import _calculate_seat_change_proration_amount
 
 
 def execute():
+	ensure_team_field()
 	seat_change_logs = frappe.get_all(
 		"Seat Change Log",
 		fields=[
 			"name",
 			"subscription",
-			"team",
 			"old_seats",
 			"new_seats",
 			"access_updated_at",
@@ -54,6 +55,26 @@ def execute():
 			"Seat Change Log",
 			seat_change_log.name,
 			"proration_amount",
-			flt(proration_amount, 2),
+		flt(proration_amount, 2),
 			update_modified=False,
 		)
+
+
+def ensure_team_field():
+	custom_field_name = frappe.db.get_value("Custom Field", {"dt": "Seat Change Log", "fieldname": "team"})
+	if custom_field_name:
+		return
+
+	create_custom_field(
+		"Seat Change Log",
+		{
+			"label": "Team",
+			"fieldname": "team",
+			"fieldtype": "Link",
+			"options": "Team",
+			"reqd": 1,
+			"in_list_view": 1,
+			"insert_after": "subscription",
+		},
+		ignore_validate=True,
+	)
