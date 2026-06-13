@@ -63,8 +63,7 @@
 			"fieldtype": "Select",
 			"label": "Change Type",
 			"options": "Increase\nDecrease",
-			"reqd": 1,
-			"in_standard_filter": 1
+			"reqd": 1
 		},
 		{
 			"fieldname": "access_updated_at",

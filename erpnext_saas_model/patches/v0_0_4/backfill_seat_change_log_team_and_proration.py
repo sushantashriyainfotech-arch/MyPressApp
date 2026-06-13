@@ -98,16 +98,11 @@ def ensure_team_field():
 
 
 def ensure_standard_filters():
-	for fieldname in (
-		"subscription",
-		"team",
-		"site",
-		"change_type",
-		"access_updated_at",
-		"billing_effective_from",
-		"changed_by",
-	):
+	for fieldname in ("subscription", "team", "site"):
 		ensure_docfield_flag("Seat Change Log", fieldname, "in_standard_filter", 1)
+
+	for fieldname in ("change_type", "access_updated_at", "billing_effective_from", "changed_by"):
+		ensure_docfield_flag("Seat Change Log", fieldname, "in_standard_filter", 0)
 
 	frappe.clear_cache(doctype="Seat Change Log")
 
