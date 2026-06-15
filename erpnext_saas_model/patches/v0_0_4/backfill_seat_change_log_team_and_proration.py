@@ -11,19 +11,23 @@ def execute():
 	frappe.reload_doc("erpnext_saas_model", "doctype", "seat_change_log")
 	ensure_team_field()
 	ensure_standard_filters()
+	include_currency = _has_column("Seat Change Log", "currency")
+	fields = [
+		"name",
+		"subscription",
+		"team",
+		"old_seats",
+		"new_seats",
+		"access_updated_at",
+		"billing_effective_from",
+		"proration_amount",
+	]
+	if include_currency:
+		fields.append("currency")
+
 	seat_change_logs = frappe.get_all(
 		"Seat Change Log",
-		fields=[
-			"name",
-			"subscription",
-			"team",
-			"old_seats",
-			"new_seats",
-			"access_updated_at",
-			"billing_effective_from",
-			"proration_amount",
-			"currency",
-		],
+		fields=fields,
 		order_by="creation asc",
 	)
 
@@ -39,19 +43,10 @@ def execute():
 					team,
 					update_modified=False,
 			)
-		currency = getattr(seat_change_log, "currency", None)
-		if not currency and team:
-			currency = get_team_currency(team)
-			frappe.db.set_value(
-				"Seat Change Log",
-				seat_change_log.name,
-				"currency",
-				currency,
-				update_modified=False,
-			)
-		elif currency:
-			currency = currency.upper()
-			if currency != getattr(seat_change_log, "currency", None):
+		if include_currency:
+			currency = getattr(seat_change_log, "currency", None)
+			if not currency and team:
+				currency = get_team_currency(team)
 				frappe.db.set_value(
 					"Seat Change Log",
 					seat_change_log.name,
@@ -59,6 +54,16 @@ def execute():
 					currency,
 					update_modified=False,
 				)
+			elif currency:
+				currency = currency.upper()
+				if currency != getattr(seat_change_log, "currency", None):
+					frappe.db.set_value(
+						"Seat Change Log",
+						seat_change_log.name,
+						"currency",
+						currency,
+						update_modified=False,
+					)
 
 		subscription = getattr(seat_change_log, "subscription", None)
 		if not subscription:
@@ -128,6 +133,20 @@ def get_team_currency(team: str | None) -> str:
 	if not team:
 		return "USD"
 	return (frappe.db.get_value("Team", team, "currency") or "USD").upper()
+
+
+def _has_column(doctype: str, fieldname: str) -> bool:
+	has_column = getattr(frappe.db, "has_column", None)
+	if callable(has_column):
+		try:
+			return bool(has_column(doctype, fieldname))
+		except Exception:
+			return False
+
+	if frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name"):
+		return True
+
+	return bool(frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name"))
 
 
 def ensure_standard_filters():

@@ -309,6 +309,67 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			],
 		)
 
+	def test_seat_change_log_backfill_skips_currency_when_column_is_missing(self):
+		captured_fields = []
+
+		def fake_get_all(doctype, filters=None, fields=None, pluck=None, order_by=None, limit=None):
+			if doctype == "Seat Change Log":
+				captured_fields.extend(fields or [])
+				return [
+					SimpleNamespace(
+						name="SEAT-LOG-001",
+						subscription="SUB-001",
+						team=None,
+						old_seats=5,
+						new_seats=7,
+						access_updated_at=datetime(2026, 5, 1, 12, 0, 0),
+						billing_effective_from=datetime(2026, 5, 1, 0, 0, 0).date(),
+						proration_amount=0.0,
+					)
+				]
+			return []
+
+		def fake_get_value(doctype, name, fieldname):
+			if doctype == "Subscription" and fieldname == "team":
+				return "TEAM-001"
+			raise AssertionError(f"Unexpected get_value: {doctype} {name} {fieldname}")
+
+		def fake_get_cached_doc(doctype, name):
+			if doctype == "Subscription":
+				return SimpleNamespace(
+					name=name,
+					team="TEAM-001",
+					site="SITE-001",
+					document_type="Site",
+					document_name="SITE-001",
+					plan_type="Site Plan",
+					plan="PLAN-001",
+					price_per_seat=999,
+					price_inr=31,
+					price_usd=0,
+					total_amount=31,
+					billable_seats=1,
+				)
+			if doctype == "Site Plan":
+				return SimpleNamespace(name=name, billing_type="Seat Based", price_inr=31, price_usd=0)
+			raise AssertionError(f"Unexpected cached doc: {doctype} {name}")
+
+		def fake_set_value(*args, **kwargs):
+			raise AssertionError("currency writes should be skipped when the column is missing")
+
+		with patch.object(seat_change_log_backfill_patch_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			seat_change_log_backfill_patch_module.frappe, "get_value", side_effect=fake_get_value
+		), patch.object(seat_change_log_backfill_patch_module.frappe, "reload_doc", return_value=None), patch.object(
+			seat_change_log_backfill_patch_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc
+		), patch.object(
+			seat_change_log_backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
+		), patch.object(seat_change_log_backfill_patch_module.frappe.db, "get_value", return_value="INR"), patch.object(
+			seat_change_log_backfill_patch_module.frappe.db, "has_column", return_value=False
+		):
+			seat_change_log_backfill_patch_module.execute()
+
+		self.assertNotIn("currency", captured_fields)
+
 	def test_backfill_patch_sets_missing_usage_record_remarks(self):
 		captured = []
 
