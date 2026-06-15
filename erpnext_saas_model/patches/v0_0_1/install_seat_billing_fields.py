@@ -48,30 +48,6 @@ def ensure_site_plan_fields():
 	)
 	_ensure_custom_field(
 		"Site Plan",
-		"price_inr",
-		{
-			"label": "Price (INR)",
-			"fieldname": "price_inr",
-			"fieldtype": "Currency",
-			"options": "INR",
-			"mandatory_depends_on": "eval:doc.billing_type == 'Seat Based'",
-			"insert_after": "billing_type",
-		},
-	)
-	_ensure_custom_field(
-		"Site Plan",
-		"price_usd",
-		{
-			"label": "Price (USD)",
-			"fieldname": "price_usd",
-			"fieldtype": "Currency",
-			"options": "USD",
-			"mandatory_depends_on": "eval:doc.billing_type == 'Seat Based'",
-			"insert_after": "price_inr",
-		},
-	)
-	_ensure_custom_field(
-		"Site Plan",
 		"min_seats",
 		{
 			"label": "Minimum Seats",
@@ -79,7 +55,7 @@ def ensure_site_plan_fields():
 			"fieldtype": "Int",
 			"default": "1",
 			"depends_on": "eval:doc.billing_type == 'Seat Based'",
-			"insert_after": "price_usd",
+			"insert_after": "billing_type",
 		},
 	)
 	_ensure_custom_field(
