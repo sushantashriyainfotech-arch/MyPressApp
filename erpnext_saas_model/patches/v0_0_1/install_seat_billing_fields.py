@@ -287,6 +287,16 @@ def ensure_invoice_item_fields():
 			"insert_after": "document_name",
 		},
 	)
+	_ensure_custom_field(
+		"Invoice Item",
+		"billable_seats",
+		{
+			"label": "Billable Seats",
+			"fieldname": "billable_seats",
+			"fieldtype": "Int",
+			"insert_after": "usage_record",
+		},
+	)
 
 
 def ensure_existing_site_plans_remain_resource_based():

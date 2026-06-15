@@ -21,6 +21,13 @@ class Invoice(PressInvoice):
 		plan = frappe.get_cached_doc(usage_record.plan_type, usage_record.plan)
 		return is_seat_based_plan(plan)
 
+	def _is_seat_invoice_item(self, item) -> bool:
+		if not getattr(item, "plan", None):
+			return False
+
+		plan = frappe.get_cached_doc("Site Plan", item.plan)
+		return is_seat_based_plan(plan)
+
 	def _get_seat_usage_description(self, usage_record) -> str:
 		if getattr(usage_record, "remark", None):
 			return usage_record.remark
@@ -36,6 +43,65 @@ class Invoice(PressInvoice):
 			reference_at=getattr(usage_record, "snapshot_taken_at", None) or getattr(usage_record, "date", None),
 			fallback_billable_seats=getattr(usage_record, "billable_seats", None),
 		)
+
+	def _get_seat_usage_item_signature(
+		self,
+		usage_record,
+		billable_seats: int,
+		description: str,
+		daily_rate: float,
+	) -> tuple[str | None, str | None, str | None, str | None, int, str, float]:
+		site = usage_record.site if getattr(usage_record, "document_type", None) == "Marketplace App" else None
+		return (
+			getattr(usage_record, "document_type", None),
+			getattr(usage_record, "document_name", None),
+			getattr(usage_record, "plan", None),
+			site,
+			cint(billable_seats or 0),
+			description or "",
+			flt(daily_rate or 0, 2),
+		)
+
+	def _seat_usage_item_matches(
+		self,
+		item,
+		usage_record,
+		billable_seats: int,
+		description: str,
+		daily_rate: float,
+	) -> bool:
+		if not self._is_seat_invoice_item(item):
+			return False
+
+		return self._get_seat_usage_item_signature(
+			usage_record=usage_record,
+			billable_seats=billable_seats,
+			description=description,
+			daily_rate=daily_rate,
+		) == (
+			getattr(item, "document_type", None),
+			getattr(item, "document_name", None),
+			getattr(item, "plan", None),
+			getattr(item, "site", None) if getattr(item, "document_type", None) == "Marketplace App" else None,
+			cint(getattr(item, "billable_seats", 0) or 0),
+			getattr(item, "description", None) or "",
+			flt(getattr(item, "rate", 0) or 0, 2),
+		)
+
+	def _get_last_seat_usage_invoice_item(self, usage_record, billable_seats: int, description: str, daily_rate: float):
+		if not self.items:
+			return None
+
+		last_item = self.items[-1]
+		if self._seat_usage_item_matches(last_item, usage_record, billable_seats, description, daily_rate):
+			return last_item
+		return None
+
+	def _find_seat_usage_invoice_item(self, usage_record, billable_seats: int, description: str, daily_rate: float):
+		for row in reversed(self.items):
+			if self._seat_usage_item_matches(row, usage_record, billable_seats, description, daily_rate):
+				return row
+		return None
 
 	def _get_seat_usage_pricing(self, usage_record) -> tuple[int, float]:
 		"""
@@ -67,8 +133,9 @@ class Invoice(PressInvoice):
 			return
 
 		billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
+		description = self._get_seat_usage_description(usage_record)
 
-		invoice_item = self.get_invoice_item_for_usage_record(usage_record)
+		invoice_item = self._get_last_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
 		if not invoice_item:
 			invoice_item = self.append(
 				"items",
@@ -76,9 +143,10 @@ class Invoice(PressInvoice):
 					"document_type": usage_record.document_type,
 					"document_name": usage_record.document_name,
 					"plan": usage_record.plan,
-					"description": self._get_seat_usage_description(usage_record),
+					"description": description,
 					"usage_record": usage_record.name,
 					"seat_change_log": getattr(usage_record, "seat_change_log", None),
+					"billable_seats": billable_seats,
 					"quantity": 0,
 					"rate": daily_rate,
 					"site": usage_record.site,
@@ -89,9 +157,11 @@ class Invoice(PressInvoice):
 				invoice_item.usage_record = usage_record.name
 			if not getattr(invoice_item, "seat_change_log", None):
 				invoice_item.seat_change_log = getattr(usage_record, "seat_change_log", None)
+			if not getattr(invoice_item, "billable_seats", None):
+				invoice_item.billable_seats = billable_seats
 			invoice_item.rate = daily_rate
 			if not getattr(invoice_item, "description", None):
-				invoice_item.description = self._get_seat_usage_description(usage_record)
+				invoice_item.description = description
 		invoice_item.quantity = flt((invoice_item.quantity or 0) + 1, 2)
 		invoice_item.amount = flt((invoice_item.quantity or 0) * daily_rate, 2)
 		if billable_seats:
@@ -113,53 +183,24 @@ class Invoice(PressInvoice):
 		if usage_record.invoice != self.name:
 			return
 
-		_, daily_rate = self._get_seat_usage_pricing(usage_record)
-		for row in self.items:
-			conditions = (
-				row.document_type == usage_record.document_type
-				and row.document_name == usage_record.document_name
-				and row.plan == usage_record.plan
-				and getattr(row, "seat_change_log", None) == getattr(usage_record, "seat_change_log", None)
-				and flt(row.rate or 0, 2) == daily_rate
-			)
-			if row.document_type == "Marketplace App":
-				conditions = conditions and row.site == usage_record.site
-
-			if not conditions:
-				continue
-
-			usage_record.db_set("invoice", None)
-			remaining = frappe.db.count(
-				"Usage Record",
-				{
-					"invoice": self.name,
-					"document_type": usage_record.document_type,
-					"document_name": usage_record.document_name,
-					"plan": usage_record.plan,
-					"seat_change_log": getattr(usage_record, "seat_change_log", None),
-				},
-			)
-			if not remaining:
-				self.remove(row)
-				self.save()
+		billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
+		description = self._get_seat_usage_description(usage_record)
+		row = self._find_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
+		if not row:
 			return
+
+		usage_record.db_set("invoice", None)
+		row.quantity = flt((row.quantity or 0) - 1, 2)
+		row.amount = flt((row.quantity or 0) * flt(row.rate or daily_rate, 2), 2)
+		if row.quantity <= 0:
+			self.remove(row)
+		self.save()
 
 	def get_invoice_item_for_usage_record(self, usage_record):
 		if self._is_seat_usage_record(usage_record):
-			_, daily_rate = self._get_seat_usage_pricing(usage_record)
-			for row in self.items:
-				conditions = (
-					row.document_type == usage_record.document_type
-					and row.document_name == usage_record.document_name
-					and row.plan == usage_record.plan
-					and getattr(row, "seat_change_log", None) == getattr(usage_record, "seat_change_log", None)
-					and flt(row.rate or 0, 2) == daily_rate
-				)
-				if row.document_type == "Marketplace App":
-					conditions = conditions and row.site == usage_record.site
-				if conditions:
-					return row
-			return None
+			billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
+			description = self._get_seat_usage_description(usage_record)
+			return self._find_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
 
 		if hasattr(PressInvoice, "get_invoice_item_for_usage_record"):
 			return PressInvoice.get_invoice_item_for_usage_record(self, usage_record)

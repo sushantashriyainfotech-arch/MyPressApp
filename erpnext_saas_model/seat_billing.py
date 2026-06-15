@@ -1225,17 +1225,18 @@ def get_seat_usage_record_remark(
 		subscription_name = subscription if isinstance(subscription, str) else subscription.get("name")
 		team = team or (subscription.get("team") if isinstance(subscription, dict) else None)
 
-	change_logs = []
-	if subscription_name:
-		change_logs = _get_seat_change_logs_for_reference(subscription_name, reference_at=reference_at, team=team)
-	elif seat_change_log:
+	if seat_change_log:
 		change_log = (
 			seat_change_log
 			if isinstance(seat_change_log, dict)
 			else frappe.get_cached_doc("Seat Change Log", seat_change_log).as_dict()
 		)
 		if change_log:
-			change_logs = [change_log]
+			return _format_seat_change_log_description(change_log, fallback_billable_seats=fallback_billable_seats)
+
+	change_logs = []
+	if subscription_name:
+		change_logs = _get_seat_change_logs_for_reference(subscription_name, reference_at=reference_at, team=team)
 
 	if change_logs:
 		return _format_seat_change_logs_description(change_logs, fallback_billable_seats=fallback_billable_seats)

@@ -40,10 +40,12 @@ def backfill_usage_record_remarks(seat_plan_names):
 	)
 
 	for usage_record in usage_records:
+		seat_change_log = getattr(usage_record, "seat_change_log", None) or None
 		remark = get_seat_usage_record_remark(
 			subscription=usage_record.subscription,
 			team=getattr(usage_record, "team", None),
 			reference_at=getattr(usage_record, "snapshot_taken_at", None) or usage_record.date,
+			seat_change_log=seat_change_log,
 			fallback_billable_seats=usage_record.billable_seats,
 		)
 		if usage_record.remark == remark:
