@@ -152,8 +152,9 @@ def backfill_usage_record_billable_seats_and_remarks():
 			updates["seat_change_log"] = getattr(seat_change_log, "name", None)
 		if getattr(usage_record, "remark", None) != remark:
 			updates["remark"] = remark
-		if not cint(getattr(usage_record, "billable_seats", 0) or 0):
-			updates["billable_seats"] = _get_usage_record_billable_seats(usage_record)
+		snapshot_billable_seats = _get_usage_record_billable_seats(usage_record, seat_change_log)
+		if snapshot_billable_seats is not None and cint(getattr(usage_record, "billable_seats", 0) or 0) != snapshot_billable_seats:
+			updates["billable_seats"] = snapshot_billable_seats
 
 		for fieldname, value in updates.items():
 			if value is None:
@@ -304,7 +305,15 @@ def _get_usage_record_for_invoice_item(invoice_item):
 	return usage_records[0] if usage_records else None
 
 
-def _get_usage_record_billable_seats(usage_record) -> int | None:
+def _get_usage_record_billable_seats(usage_record, seat_change_log=None) -> int | None:
+	if seat_change_log:
+		if isinstance(seat_change_log, dict):
+			new_seats = cint(seat_change_log.get("new_seats", 0) or 0)
+		else:
+			new_seats = cint(getattr(seat_change_log, "new_seats", 0) or 0)
+		if new_seats:
+			return new_seats
+
 	if cint(getattr(usage_record, "billable_seats", 0) or 0):
 		return cint(getattr(usage_record, "billable_seats", 0) or 0)
 

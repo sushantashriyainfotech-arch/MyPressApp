@@ -1313,14 +1313,14 @@ def _insert_seat_usage_record(subscription, date):
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
 	team_currency = get_team_currency(subscription.team)
 	selected_price = get_plan_price_for_currency(plan, team_currency)
-	billable_seats = cint(subscription.billable_seats or 0)
-	seat_amount = flt(selected_price * billable_seats, 2)
 	snapshot_taken_at = now_datetime()
 	seat_change_log = get_seat_change_log_for_reference(
 		subscription.name,
 		reference_at=snapshot_taken_at,
 		team=subscription.team,
 	)
+	billable_seats = _get_snapshot_billable_seats(subscription, seat_change_log)
+	seat_amount = flt(selected_price * billable_seats, 2)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
 		team=subscription.team,
@@ -1353,3 +1353,12 @@ def _insert_seat_usage_record(subscription, date):
 	usage_record.insert(ignore_permissions=True)
 	usage_record.submit()
 	return usage_record
+
+
+def _get_snapshot_billable_seats(subscription, seat_change_log=None) -> int:
+	if seat_change_log:
+		new_seats = cint(_get_seat_change_log_value(seat_change_log, "new_seats") or 0)
+		if new_seats:
+			return new_seats
+
+	return cint(getattr(subscription, "billable_seats", 0) or 0)
