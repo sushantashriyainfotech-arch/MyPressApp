@@ -244,5 +244,4 @@ class Invoice(PressInvoice):
 		self.price_inr = flt(getattr(plan, "price_inr", 0) or 0, 2)
 		self.price_usd = flt(getattr(plan, "price_usd", 0) or 0, 2)
 		selected_price = get_plan_price_for_currency(plan, team_currency)
-		self.price_per_seat = selected_price
 		self.total_amount = flt(selected_price * self.billable_seats, 2)

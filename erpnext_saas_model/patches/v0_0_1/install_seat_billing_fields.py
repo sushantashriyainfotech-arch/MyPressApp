@@ -313,30 +313,10 @@ def ensure_existing_site_plans_remain_resource_based():
 def ensure_existing_seat_prices_are_migrated():
 	frappe.db.sql(
 		"""
-		UPDATE `tabSite Plan`
-		SET
-			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
-			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
-		WHERE IFNULL(`billing_type`, '') = 'Seat Based'
-		"""
-	)
-	frappe.db.sql(
-		"""
 		UPDATE `tabSubscription`
 		SET
-			`currency` = COALESCE(NULLIF(`currency`, ''), (SELECT `currency` FROM `tabTeam` WHERE `tabTeam`.`name` = `tabSubscription`.`team`)),
-			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
-			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
+			`currency` = COALESCE(NULLIF(`currency`, ''), (SELECT `currency` FROM `tabTeam` WHERE `tabTeam`.`name` = `tabSubscription`.`team`))
 		WHERE IFNULL(`plan_type`, '') = 'Site Plan'
-		"""
-	)
-	frappe.db.sql(
-		"""
-		UPDATE `tabInvoice`
-		SET
-			`price_inr` = COALESCE(NULLIF(`price_inr`, 0), NULLIF(`price_per_seat`, 0), `price_inr`),
-			`price_usd` = COALESCE(NULLIF(`price_usd`, 0), NULLIF(`price_per_seat`, 0), `price_usd`)
-		WHERE IFNULL(`type`, '') = 'Subscription'
 		"""
 	)
 	frappe.db.commit()

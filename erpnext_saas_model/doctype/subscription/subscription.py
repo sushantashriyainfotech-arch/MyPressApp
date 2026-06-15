@@ -92,7 +92,6 @@ class Subscription(PressSubscription):
 		self.currency = get_team_currency(getattr(self, "team", None))
 		self.price_inr = 0
 		self.price_usd = 0
-		self.price_per_seat = 0
 		self.total_amount = get_plan_total_price(plan) if plan else 0
 		self.seats_last_updated = now_datetime()
 
@@ -178,7 +177,6 @@ class Subscription(PressSubscription):
 		self.currency = team_currency
 		self.price_inr = price_inr
 		self.price_usd = price_usd
-		self.price_per_seat = selected_price
 		self.total_amount = flt(cint(self.billable_seats) * flt(selected_price or 0, 2), 2)
 		self.seats_last_updated = getattr(self, "seats_last_updated", None) or now_datetime()
 		_log_subscription_seat_debug(
@@ -291,7 +289,6 @@ class Subscription(PressSubscription):
 
 		self.price_inr = price_inr
 		self.price_usd = price_usd
-		self.price_per_seat = selected_price
 		self.total_amount = flt(cint(self.billable_seats) * flt(selected_price or 0, 2), 2)
 		_log_subscription_seat_debug(
 			"validate.complete",
@@ -394,7 +391,6 @@ class Subscription(PressSubscription):
 		self.currency = result.get("team_currency") or get_team_currency(getattr(self, "team", None))
 		self.price_inr = flt(result.get("price_inr") or 0, 2)
 		self.price_usd = flt(result.get("price_usd") or 0, 2)
-		self.price_per_seat = flt(result.get("selected_price") or result.get("price_per_seat") or 0, 2)
 		self.total_amount = flt(result["total_amount"], 2)
 		self.seats_last_updated = now_datetime()
 		self.save(ignore_permissions=True)
@@ -416,7 +412,7 @@ class Subscription(PressSubscription):
 			"billable_seats": self.billable_seats,
 			"price_inr": self.price_inr,
 			"price_usd": self.price_usd,
-			"selected_price": self.price_per_seat,
+			"selected_price": flt(result.get("selected_price") or 0, 2),
 			"total_amount": self.total_amount,
 			"message": (
 				f"Your seat count has been updated to {self.billable_seats}. "

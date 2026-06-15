@@ -82,11 +82,6 @@ def get_plan_price_for_currency(
 	return flt(price, 2)
 
 
-def get_plan_price_per_seat(plan: str | dict[str, Any] | None, currency: str | None = None) -> float:
-	"""Backward-compatible wrapper for the currency-aware seat price helper."""
-	return get_plan_price_for_currency(plan, currency=currency)
-
-
 def get_seat_plans() -> list[dict[str, Any]]:
 	"""
 	Returns a list of all enabled Site Plans that use seat-based billing.
@@ -1275,7 +1270,6 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 	subscription_doc.billable_seats = cint(validation["billable_seats"])
 	subscription_doc.price_inr = flt(validation.get("price_inr") or getattr(plan_doc, "price_inr", 0) or 0, 2)
 	subscription_doc.price_usd = flt(validation.get("price_usd") or getattr(plan_doc, "price_usd", 0) or 0, 2)
-	subscription_doc.price_per_seat = selected_price
 	subscription_doc.total_amount = flt(selected_price * subscription_doc.billable_seats, 2)
 	subscription_doc.seats_last_updated = now_datetime()
 	subscription_doc.enabled = 1
@@ -1300,7 +1294,7 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 		"team_currency": team_currency,
 		"price_inr": subscription_doc.price_inr,
 		"price_usd": subscription_doc.price_usd,
-		"selected_price": subscription_doc.price_per_seat,
+		"selected_price": selected_price,
 		"total_amount": subscription_doc.total_amount,
 		"message": _(
 			"Your seat count has been updated to {0}. Billing will reflect this change from the next midnight snapshot."
