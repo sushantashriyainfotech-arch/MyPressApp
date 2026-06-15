@@ -9,7 +9,7 @@ from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime, nowtime
 from erpnext_saas_model.user_eligibility import _log_user_eligibility
 
-SEAT_BILLING_SNAPSHOT_HOUR = 18
+SEAT_BILLING_SNAPSHOT_HOUR = 0
 ACTIVE_USER_CACHE_TTL = 60 * 5
 
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
@@ -354,13 +354,21 @@ def get_currency_symbol(currency: str | None) -> str:
 	return "₹" if currency == "INR" else "$"
 
 
+def _is_before_snapshot(moment: datetime) -> bool:
+	"""Return True when `moment` is still before the daily billing snapshot boundary."""
+	snapshot_time = time(SEAT_BILLING_SNAPSHOT_HOUR, 0)
+	if SEAT_BILLING_SNAPSHOT_HOUR == 0:
+		return moment.time() == snapshot_time
+	return moment.time() < snapshot_time
+
+
 def get_next_snapshot_date(moment: datetime | None = None):
 	"""
 	Determines the date of the next billing snapshot.
-	Snapshots happen daily at 6 PM (18:00).
+	Snapshots happen daily at midnight (00:00).
 	"""
 	moment = moment or now_datetime()
-	if moment.time() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
+	if _is_before_snapshot(moment):
 		return moment.date()
 
 	return getdate(moment.date()) + timedelta(days=1)
@@ -369,10 +377,10 @@ def get_next_snapshot_date(moment: datetime | None = None):
 def get_billing_effective_from(moment: datetime | None = None):
 	"""
 	Determines when a seat change should start being billed.
-	Changes made after 6 PM take effect from the next day's snapshot.
+	Changes made after midnight take effect from the next day's snapshot.
 	"""
 	moment = moment or now_datetime()
-	if moment.time() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
+	if _is_before_snapshot(moment):
 		return getdate(moment.date())
 
 	return getdate(moment.date()) + timedelta(days=1)
@@ -1132,7 +1140,7 @@ def log_seat_change(
 def create_seat_usage_record(subscription: str | dict[str, Any], date=None, force: bool = False):
 	"""
 	Creates a daily Usage Record representing the seat count snapshot for billing.
-	Only executes after the 6 PM daily cutoff.
+	Uses the midnight snapshot boundary configured for seat billing.
 	"""
 	if isinstance(subscription, str):
 		subscription_doc = frappe.get_cached_doc("Subscription", subscription)
@@ -1144,9 +1152,6 @@ def create_seat_usage_record(subscription: str | dict[str, Any], date=None, forc
 		return None
 
 	date = getdate(date or frappe.utils.today())
-	# Bypassed if before snapshot time unless forced
-	if date == getdate() and not force and nowtime() < time(SEAT_BILLING_SNAPSHOT_HOUR, 0):
-		return None
 
 	if subscription_doc.is_usage_record_created(date):
 		return None
@@ -1297,7 +1302,7 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 		"selected_price": subscription_doc.price_per_seat,
 		"total_amount": subscription_doc.total_amount,
 		"message": _(
-			"Your seat count has been updated to {0}. Billing will reflect this change from today's daily update at 6 PM."
+			"Your seat count has been updated to {0}. Billing will reflect this change from the next midnight snapshot."
 		).format(subscription_doc.billable_seats),
 	}
 

@@ -21,6 +21,18 @@ from erpnext_saas_model.patches.v0_0_4 import (
 
 
 class TestSeatBillingHelpers(FrappeTestCase):
+	def test_snapshot_helpers_use_midnight_cutoff(self):
+		snapshot_moment = datetime(2026, 5, 29, 0, 0, 0)
+		after_snapshot = datetime(2026, 5, 29, 0, 0, 1)
+
+		self.assertEqual(seat_billing_module.get_next_snapshot_date(snapshot_moment), snapshot_moment.date())
+		self.assertEqual(seat_billing_module.get_next_snapshot_date(after_snapshot), datetime(2026, 5, 30).date())
+		self.assertEqual(seat_billing_module.get_billing_effective_from(snapshot_moment), snapshot_moment.date())
+		self.assertEqual(
+			seat_billing_module.get_billing_effective_from(after_snapshot),
+			datetime(2026, 5, 30).date(),
+		)
+
 	def test_usage_record_validate_preserves_existing_amount(self):
 		usage_record = UsageRecord.__new__(UsageRecord)
 		usage_record.plan = "PLAN-001"
@@ -281,7 +293,9 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		with patch.object(seat_change_log_backfill_patch_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
 			seat_change_log_backfill_patch_module.frappe, "get_value", side_effect=fake_get_value
-		), patch.object(seat_change_log_backfill_patch_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
+		), patch.object(seat_change_log_backfill_patch_module.frappe, "reload_doc", return_value=None), patch.object(
+			seat_change_log_backfill_patch_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc
+		), patch.object(
 			seat_change_log_backfill_patch_module.frappe.db, "set_value", side_effect=fake_set_value
 		), patch.object(seat_change_log_backfill_patch_module.frappe.db, "get_value", return_value="INR"):
 			seat_change_log_backfill_patch_module.execute()

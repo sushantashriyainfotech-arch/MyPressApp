@@ -8,6 +8,7 @@ from erpnext_saas_model.seat_billing import _calculate_seat_change_proration_amo
 
 
 def execute():
+	frappe.reload_doc("erpnext_saas_model", "doctype", "seat_change_log")
 	ensure_team_field()
 	ensure_standard_filters()
 	seat_change_logs = frappe.get_all(
@@ -85,6 +86,9 @@ def execute():
 
 
 def ensure_team_field():
+	if frappe.db.get_value("DocField", {"parent": "Seat Change Log", "fieldname": "team"}, "name"):
+		return
+
 	custom_field_name = frappe.db.get_value("Custom Field", {"dt": "Seat Change Log", "fieldname": "team"})
 	if custom_field_name:
 		custom_field = frappe.get_doc("Custom Field", custom_field_name)

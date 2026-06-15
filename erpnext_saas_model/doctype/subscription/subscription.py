@@ -363,7 +363,7 @@ class Subscription(PressSubscription):
 		"""
 		Daily billing snapshot record (Usage Record).
 		- Overrides base to handle seat-based metrics.
-		- Site usage is captured via a snapshot at approximately 6 PM.
+		- Site usage is captured via a snapshot at midnight.
 		"""
 		if not self.plan:
 			return super().create_usage_record(date=date)
@@ -373,10 +373,6 @@ class Subscription(PressSubscription):
 			return super().create_usage_record(date=date)
 
 		date = frappe.utils.getdate(date or frappe.utils.today())
-		
-		# Standard Press usage collection happens once a day (after 6 PM)
-		if date == frappe.utils.getdate() and frappe.utils.now_datetime().time().hour < 18:
-			return None
 
 		return create_seat_usage_record(self, date=date, force=True)
 	
@@ -424,7 +420,7 @@ class Subscription(PressSubscription):
 			"total_amount": self.total_amount,
 			"message": (
 				f"Your seat count has been updated to {self.billable_seats}. "
-				f"Billing will reflect this change from the next 6 PM snapshot."
+				f"Billing will reflect this change from the next midnight snapshot."
 			),
 		}
 
