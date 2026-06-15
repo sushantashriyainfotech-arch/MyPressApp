@@ -88,7 +88,6 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 			"rate",
 			"description",
 			"usage_record",
-			"team",
 		],
 		order_by="creation asc",
 	)
@@ -130,17 +129,17 @@ def _get_usage_record_for_invoice_item(invoice_item):
 			"plan": invoice_item.plan,
 			"docstatus": 1,
 		},
-			fields=[
-				"name",
-				"subscription",
-				"date",
-				"billable_seats",
-				"seat_change_log",
-				"remark",
-				"snapshot_taken_at",
-				*(["team"] if include_team else []),
-			],
-			order_by="creation asc",
-		)
+		fields=[
+			"name",
+			"subscription",
+			"date",
+			"billable_seats",
+			"seat_change_log",
+			"remark",
+			"snapshot_taken_at",
+			*(["team"] if include_team else []),
+		],
+		order_by="creation asc",
+	)
 
 	return usage_records[0] if usage_records else None
