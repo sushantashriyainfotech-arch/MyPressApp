@@ -1,7 +1,7 @@
 (function () {
 	function updateFieldVisibility(frm) {
 		const seatBased = frm.doc.billing_type === "Seat Based";
-		["price_inr", "price_usd", "min_seats", "max_seats", "next_plan"].forEach((fieldname) => {
+		["min_seats", "max_seats", "next_plan"].forEach((fieldname) => {
 			frm.toggle_display(fieldname, seatBased);
 		});
 		frm.toggle_reqd("price_inr", seatBased);
