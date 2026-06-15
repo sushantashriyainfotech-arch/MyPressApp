@@ -23,6 +23,17 @@ def execute():
 	backfill_invoice_item_descriptions(seat_plan_names)
 
 
+def _has_column(doctype: str, fieldname: str) -> bool:
+	has_column = getattr(frappe.db, "has_column", None)
+	if callable(has_column):
+		try:
+			return bool(has_column(doctype, fieldname))
+		except Exception:
+			return False
+
+	return bool(frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name"))
+
+
 def ensure_seat_change_log_fields():
 	ensure_custom_field(
 		"Usage Record",
@@ -62,6 +73,19 @@ def ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
 
 
 def backfill_usage_record_remarks(seat_plan_names):
+	include_team = _has_column("Usage Record", "team")
+	fields = [
+		"name",
+		"remark",
+		"billable_seats",
+		"subscription",
+		"date",
+		"snapshot_taken_at",
+		"seat_change_log",
+	]
+	if include_team:
+		fields.insert(4, "team")
+
 	usage_records = frappe.get_all(
 		"Usage Record",
 		filters={
@@ -69,16 +93,7 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"remark",
-			"billable_seats",
-			"subscription",
-			"team",
-			"date",
-			"snapshot_taken_at",
-			"seat_change_log",
-		],
+		fields=fields,
 		order_by="creation asc",
 	)
 
@@ -186,6 +201,7 @@ def _should_replace_description(description: str | None) -> bool:
 
 
 def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str]):
+	include_team = _has_column("Usage Record", "team")
 	if getattr(invoice_item, "usage_record", None):
 		return frappe.get_doc("Usage Record", invoice_item.usage_record)
 
@@ -198,15 +214,16 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 			"plan": invoice_item.plan,
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"subscription",
-			"date",
-			"billable_seats",
-			"seat_amount",
-			"amount",
-			"seat_change_log",
-		],
+			fields=[
+				"name",
+				"subscription",
+				"date",
+				"billable_seats",
+				"seat_amount",
+				"amount",
+				"seat_change_log",
+				*(["team"] if include_team else []),
+			],
 		order_by="creation asc",
 	)
 

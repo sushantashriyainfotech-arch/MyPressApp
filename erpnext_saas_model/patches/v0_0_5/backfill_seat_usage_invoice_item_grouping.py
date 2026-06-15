@@ -18,6 +18,17 @@ def execute():
 	normalize_draft_seat_invoice_items()
 
 
+def _has_column(doctype: str, fieldname: str) -> bool:
+	has_column = getattr(frappe.db, "has_column", None)
+	if callable(has_column):
+		try:
+			return bool(has_column(doctype, fieldname))
+		except Exception:
+			return False
+
+	return bool(frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name"))
+
+
 def ensure_invoice_item_fields():
 	custom_field_name = frappe.db.get_value("Custom Field", {"dt": "Invoice Item", "fieldname": "billable_seats"})
 	if custom_field_name:
@@ -80,16 +91,29 @@ def backfill_invoice_item_billable_seats():
 		if cint(getattr(invoice_item, "billable_seats", 0) or 0) == billable_seats:
 			continue
 
-			frappe.db.set_value(
-				"Invoice Item",
-				invoice_item.name,
-				"billable_seats",
-				billable_seats,
-				update_modified=False,
-			)
+		frappe.db.set_value(
+			"Invoice Item",
+			invoice_item.name,
+			"billable_seats",
+			billable_seats,
+			update_modified=False,
+		)
 
 
 def backfill_usage_record_billable_seats_and_remarks():
+	include_team = _has_column("Usage Record", "team")
+	fields = [
+		"name",
+		"remark",
+		"billable_seats",
+		"subscription",
+		"date",
+		"snapshot_taken_at",
+		"seat_change_log",
+	]
+	if include_team:
+		fields.insert(4, "team")
+
 	seat_plan_names = frappe.get_all(
 		"Site Plan",
 		filters={"billing_type": "Seat Based"},
@@ -105,16 +129,7 @@ def backfill_usage_record_billable_seats_and_remarks():
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"remark",
-			"billable_seats",
-			"subscription",
-			"team",
-			"date",
-			"snapshot_taken_at",
-			"seat_change_log",
-		],
+		fields=fields,
 		order_by="creation asc",
 	)
 

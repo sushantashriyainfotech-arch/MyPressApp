@@ -18,7 +18,31 @@ def execute():
 	backfill_invoice_item_descriptions(seat_plan_names)
 
 
+def _has_column(doctype: str, fieldname: str) -> bool:
+	has_column = getattr(frappe.db, "has_column", None)
+	if callable(has_column):
+		try:
+			return bool(has_column(doctype, fieldname))
+		except Exception:
+			return False
+
+	return bool(frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name"))
+
+
 def backfill_usage_record_remarks(seat_plan_names):
+	include_team = _has_column("Usage Record", "team")
+	fields = [
+		"name",
+		"remark",
+		"billable_seats",
+		"subscription",
+		"date",
+		"snapshot_taken_at",
+		"seat_change_log",
+	]
+	if include_team:
+		fields.insert(4, "team")
+
 	usage_records = frappe.get_all(
 		"Usage Record",
 		filters={
@@ -26,16 +50,7 @@ def backfill_usage_record_remarks(seat_plan_names):
 			"plan": ("in", seat_plan_names),
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"remark",
-			"billable_seats",
-			"subscription",
-			"team",
-			"date",
-			"snapshot_taken_at",
-			"seat_change_log",
-		],
+		fields=fields,
 		order_by="creation asc",
 	)
 
@@ -102,6 +117,7 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 
 
 def _get_usage_record_for_invoice_item(invoice_item):
+	include_team = _has_column("Usage Record", "team")
 	if getattr(invoice_item, "usage_record", None):
 		return frappe.get_doc("Usage Record", invoice_item.usage_record)
 
@@ -114,16 +130,17 @@ def _get_usage_record_for_invoice_item(invoice_item):
 			"plan": invoice_item.plan,
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"subscription",
-			"date",
-			"billable_seats",
-			"seat_change_log",
-			"remark",
-			"snapshot_taken_at",
-		],
-		order_by="creation asc",
-	)
+			fields=[
+				"name",
+				"subscription",
+				"date",
+				"billable_seats",
+				"seat_change_log",
+				"remark",
+				"snapshot_taken_at",
+				*(["team"] if include_team else []),
+			],
+			order_by="creation asc",
+		)
 
 	return usage_records[0] if usage_records else None
