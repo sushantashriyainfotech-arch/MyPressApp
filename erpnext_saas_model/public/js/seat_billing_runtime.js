@@ -269,10 +269,12 @@
 					button.querySelectorAll('span'),
 				).find((node) => (node.className || '').includes('truncate') && (node.className || '').includes('text-gray-900'));
 				if (priceNode) {
-					const textNode = Array.from(priceNode.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
-					if (textNode) {
-						textNode.textContent = `${seatPriceText} `;
-					}
+					Array.from(priceNode.childNodes).forEach((node) => {
+						if (node.nodeType === Node.TEXT_NODE) {
+							node.remove();
+						}
+					});
+					priceNode.insertBefore(document.createTextNode(`${seatPriceText} `), priceNode.firstChild);
 				}
 				const billingNode = Array.from(
 					button.querySelectorAll('span'),
