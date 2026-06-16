@@ -271,6 +271,7 @@
 				);
 				button.innerHTML = button.innerHTML.replace('/mo', '/seat/mo');
 				button.dataset.seatPricingAdjusted = '1';
+				console.log('seat price', seatPriceText)
 				button.dataset.seatPriceText = seatPriceText;
 			}
 			let badgeEl = button.querySelector('[data-role="plan-badge"]');
