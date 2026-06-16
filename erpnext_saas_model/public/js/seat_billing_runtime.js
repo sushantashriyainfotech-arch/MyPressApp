@@ -267,8 +267,14 @@
 
 			const badgeText = seatBased ? 'Seat Based' : 'Resource Based';
 			if (seatBased && !button.dataset.seatPricingAdjusted) {
+				const seatPriceText = formatCurrency(getPlanSeatPrice(plan));
+				button.innerHTML = button.innerHTML.replace(
+					/([$₹€£]\s?[\d,.]+(?:\.\d+)?)(?=\s*\/mo\b)/,
+					seatPriceText,
+				);
 				button.innerHTML = button.innerHTML.replace('/mo', '/seat/mo');
 				button.dataset.seatPricingAdjusted = '1';
+				button.dataset.seatPriceText = seatPriceText;
 			}
 			let badgeEl = button.querySelector('[data-role="plan-badge"]');
 			if (!badgeEl) {
