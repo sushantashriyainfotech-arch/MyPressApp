@@ -16,11 +16,17 @@ def execute():
 		filters={"billing_type": "Seat Based"},
 		pluck="name",
 	)
+	resource_plan_names = frappe.get_all(
+		"Site Plan",
+		filters={"billing_type": "Resource Based"},
+		pluck="name",
+	)
 	if not seat_plan_names:
-		return
+		seat_plan_names = []
 
 	backfill_usage_record_remarks(seat_plan_names)
 	backfill_invoice_item_descriptions(seat_plan_names)
+	backfill_resource_usage_record_amounts(resource_plan_names)
 
 
 def _has_column(doctype: str, fieldname: str) -> bool:
@@ -194,6 +200,32 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 		used_usage_records.add(usage_record.name)
 
 
+def backfill_resource_usage_record_amounts(resource_plan_names):
+	if not resource_plan_names:
+		return
+
+	usage_records = frappe.get_all(
+		"Usage Record",
+		filters={
+			"plan_type": "Site Plan",
+			"plan": ("in", resource_plan_names),
+			"docstatus": 1,
+		},
+		fields=["name", "plan", "amount", "invoice", "document_type", "document_name", "date"],
+		order_by="creation asc",
+	)
+
+	for usage_record in usage_records:
+		if flt(getattr(usage_record, "amount", 0) or 0, 2) > 0:
+			continue
+
+		invoice_item = _get_invoice_item_for_usage_record(usage_record)
+		if not invoice_item:
+			continue
+
+		_restore_resource_usage_record_amount(usage_record, invoice_item)
+
+
 def _should_replace_description(description: str | None) -> bool:
 	if not description:
 		return True
@@ -202,6 +234,7 @@ def _should_replace_description(description: str | None) -> bool:
 
 def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str]):
 	include_team = _has_column("Usage Record", "team")
+	include_seat_amount = _has_column("Usage Record", "seat_amount")
 	if getattr(invoice_item, "usage_record", None):
 		return frappe.get_doc("Usage Record", invoice_item.usage_record)
 
@@ -214,15 +247,16 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 			"plan": invoice_item.plan,
 			"docstatus": 1,
 		},
-			fields=[
-				"name",
-				"subscription",
-				"date",
-				"billable_seats",
-				"amount",
-				"seat_change_log",
-				*(["team"] if include_team else []),
-			],
+		fields=[
+			"name",
+			"subscription",
+			"date",
+			"billable_seats",
+			*(["seat_amount"] if include_seat_amount else []),
+			"amount",
+			"seat_change_log",
+			*(["team"] if include_team else []),
+		],
 		order_by="creation asc",
 	)
 
@@ -239,8 +273,54 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 	return None
 
 
+def _get_invoice_item_for_usage_record(usage_record):
+	items = frappe.get_all(
+		"Invoice Item",
+		filters={
+			"usage_record": usage_record.name,
+		},
+		fields=["name", "amount", "rate", "quantity"],
+		order_by="creation asc",
+		limit=1,
+	)
+	if items:
+		return items[0]
+
+	items = frappe.get_all(
+		"Invoice Item",
+		filters={
+			"document_type": usage_record.document_type,
+			"document_name": usage_record.document_name,
+			"plan": usage_record.plan,
+			"invoice": usage_record.invoice,
+		},
+		fields=["name", "amount", "rate", "quantity"],
+		order_by="creation asc",
+		limit=1,
+	)
+	return items[0] if items else None
+
+
 def _get_usage_record_daily_rate(usage_record) -> float:
-	daily_amount = flt(getattr(usage_record, "amount", 0), 2)
+	source_amount = getattr(usage_record, "seat_amount", None)
+	if source_amount in (None, ""):
+		source_amount = getattr(usage_record, "amount", 0)
+		return flt(source_amount, 2)
+
+	daily_amount = flt(source_amount, 2)
 	usage_date = getdate(usage_record.date)
 	days_in_month = frappe.utils.get_last_day(usage_date).day or 30
 	return flt(daily_amount / days_in_month, 2)
+
+
+def _restore_resource_usage_record_amount(usage_record, invoice_item) -> None:
+	amount = flt(getattr(invoice_item, "rate", None) or 0, 2)
+	if amount <= 0:
+		amount = flt(getattr(invoice_item, "amount", None) or 0, 2)
+	if amount <= 0:
+		return
+
+	if flt(getattr(usage_record, "amount", 0) or 0, 2) == amount:
+		return
+
+	frappe.db.set_value("Usage Record", usage_record.name, "amount", amount, update_modified=False)
