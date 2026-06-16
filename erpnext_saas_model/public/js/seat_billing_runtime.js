@@ -265,13 +265,22 @@
 			const badgeText = seatBased ? 'Seat Based' : 'Resource Based';
 			if (seatBased && !button.dataset.seatPricingAdjusted) {
 				const seatPriceText = formatCurrency(getPlanSeatPrice(plan));
-				button.innerHTML = button.innerHTML.replace(
-					/([$₹€£]\s?[\d,.]+(?:\.\d+)?)(?=\s*\/mo\b)/,
-					seatPriceText,
-				);
-				button.innerHTML = button.innerHTML.replace('/mo', '/seat/mo');
+				const priceNode = Array.from(
+					button.querySelectorAll('span'),
+				).find((node) => (node.className || '').includes('truncate') && (node.className || '').includes('text-gray-900'));
+				if (priceNode) {
+					const textNode = Array.from(priceNode.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+					if (textNode) {
+						textNode.textContent = `${seatPriceText} `;
+					}
+				}
+				const billingNode = Array.from(
+					button.querySelectorAll('span'),
+				).find((node) => (node.className || '').includes('text-gray-700') && (node.textContent || '').includes('/mo'));
+				if (billingNode) {
+					billingNode.textContent = '/seat/mo';
+				}
 				button.dataset.seatPricingAdjusted = '1';
-				console.log('seat price', seatPriceText)
 				button.dataset.seatPriceText = seatPriceText;
 			}
 			let badgeEl = button.querySelector('[data-role="plan-badge"]');
