@@ -81,6 +81,12 @@
 			.replace(/[^a-z0-9]+/g, '');
 	}
 
+	function truncateToPrecision(value, precision = 2) {
+		const amount = Number(value || 0);
+		const factor = 10 ** precision;
+		return Math.trunc(amount * factor) / factor;
+	}
+
 	function parseMaybeJSON(value) {
 		if (value == null || value === '') return null;
 		if (typeof value === 'object') return value;
@@ -145,7 +151,7 @@
 	}
 
 	function formatCurrency(value) {
-		const amount = Number(value || 0);
+		const amount = truncateToPrecision(value, 2);
 		const currency = state.currency || 'USD';
 		const locale = currency === 'INR' ? 'en-IN' : 'en-US';
 

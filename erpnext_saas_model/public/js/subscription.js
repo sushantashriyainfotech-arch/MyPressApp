@@ -10,6 +10,12 @@
 		);
 	}
 
+	function truncateToPrecision(value, precision = 2) {
+		const amount = Number(value || 0);
+		const factor = 10 ** precision;
+		return Math.trunc(amount * factor) / factor;
+	}
+
 	function getSelectedPrice(frm) {
 		const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 		const inr = Number(frm.doc.price_inr || 0);
@@ -20,7 +26,7 @@
 	}
 
 	function formatMoney(value, currencyOverride = null) {
-		const amount = Number(value || 0);
+		const amount = truncateToPrecision(value, 2);
 		const currency = (currencyOverride || getCurrencyCode() || "USD").toUpperCase();
 		try {
 			return new Intl.NumberFormat(undefined, {
@@ -29,7 +35,7 @@
 				currencyDisplay: "symbol",
 			}).format(amount);
 		} catch (error) {
-			return `${currency} ${amount.toFixed(2)}`;
+			return `${currency} ${amount}`;
 		}
 	}
 
@@ -52,7 +58,7 @@
 
 		const seats = Number(frm.doc.billable_seats || 0);
 		const selectedPrice = Number(getSelectedPrice(frm) || 0);
-		const total = Number((seats * selectedPrice).toFixed(2));
+		const total = truncateToPrecision(seats * selectedPrice, 2);
 		const currency = (frm.doc.currency || getCurrencyCode() || "USD").toUpperCase();
 		const seatBased = (billingType || frm.__billing_type || null) === "Seat Based";
 

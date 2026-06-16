@@ -12,8 +12,14 @@
 		);
 	}
 
-	function formatMoney(value) {
+	function truncateToPrecision(value, precision = 2) {
 		const amount = Number(value || 0);
+		const factor = 10 ** precision;
+		return Math.trunc(amount * factor) / factor;
+	}
+
+	function formatMoney(value) {
+		const amount = truncateToPrecision(value, 2);
 		const currency = getCurrencyCode();
 		try {
 			return new Intl.NumberFormat(undefined, {
@@ -22,7 +28,7 @@
 				currencyDisplay: "symbol",
 			}).format(amount);
 		} catch (error) {
-			return `${currency} ${amount.toFixed(2)}`;
+			return `${currency} ${amount}`;
 		}
 	}
 
