@@ -152,14 +152,12 @@
 		log('Formatting currency with locale:', locale, 'and currency:', currency);
 		log('Formatting currency:', amount, currency);
 
-		if (window.format_currency) {
-			return window.format_currency(amount, currency);
-		}
-
 		return new Intl.NumberFormat(locale, {
 			style: 'currency',
 			currency,
 			currencyDisplay: 'symbol',
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
 		}).format(amount);
 	}
 
