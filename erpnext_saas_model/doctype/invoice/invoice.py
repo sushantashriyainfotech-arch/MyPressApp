@@ -211,20 +211,21 @@ class Invoice(PressInvoice):
 			return PressInvoice.validate_items(self)
 
 	def update_item_descriptions(self):
-		for item in self.items:
-			if item.description:
-				continue
-			if not item.plan:
-				continue
-			plan = frappe.get_cached_doc("Site Plan", item.plan)
-			if not is_seat_based_plan(plan):
-				continue
-			how_many_days = f"{cint(item.quantity)} day{'s' if item.quantity > 1 else ''}"
-			site_name = (item.document_name or "").split(".archived")[0]
-			item.description = f"{site_name} active for {how_many_days} on {getattr(plan, 'plan_title', None) or plan.name} plan"
-
 		if hasattr(PressInvoice, "update_item_descriptions"):
 			PressInvoice.update_item_descriptions(self)
+
+		for item in self.items:
+			if not self._is_seat_invoice_item(item):
+				continue
+
+			usage_record_name = getattr(item, "usage_record", None)
+			if not usage_record_name:
+				continue
+
+			usage_record = frappe.get_cached_doc("Usage Record", usage_record_name)
+			seat_description = self._get_seat_usage_description(usage_record)
+			if seat_description:
+				item.description = seat_description
 
 	def before_validate(self):
 		if hasattr(PressInvoice, "before_validate"):

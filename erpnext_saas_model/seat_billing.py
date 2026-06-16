@@ -1124,7 +1124,8 @@ def log_seat_change(
 			"billing_effective_from": billing_effective_from,
 			"changed_by": changed_by or frappe.session.user,
 			"change_date": access_updated_at,
-			"currency": get_team_currency(getattr(subscription_doc, "team", None)),
+			"currency": getattr(subscription_doc, "currency", None)
+			or get_team_currency(getattr(subscription_doc, "team", None)),
 			"proration_amount": proration_amount,
 		}
 	)

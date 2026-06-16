@@ -260,6 +260,49 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		self.assertEqual(invoice.items[2].quantity, 1)
 		self.assertEqual(invoice.items[2].billable_seats, 5)
 
+	def test_update_item_descriptions_uses_press_for_resource_and_remark_for_seat_based(self):
+		invoice = Invoice.__new__(Invoice)
+		seat_item = SimpleNamespace(
+			plan="SEAT-PLAN",
+			usage_record="UR-001",
+			description=None,
+			document_type="Site",
+			document_name="site-001",
+			quantity=1,
+		)
+		resource_item = SimpleNamespace(
+			plan="RESOURCE-PLAN",
+			description=None,
+			document_type="Site",
+			document_name="site-002",
+			quantity=1,
+		)
+		invoice.items = [seat_item, resource_item]
+
+		def fake_get_cached_doc(doctype, name):
+			if doctype == "Usage Record" and name == "UR-001":
+				return SimpleNamespace(
+					name="UR-001",
+					remark="Seats changed: 1 -> 5",
+					seat_change_log=None,
+				)
+			if doctype == "Site Plan" and name == "SEAT-PLAN":
+				return SimpleNamespace(name=name, billing_type="Seat Based")
+			if doctype == "Site Plan" and name == "RESOURCE-PLAN":
+				return SimpleNamespace(name=name, billing_type="Resource Based")
+			raise AssertionError(f"Unexpected cached doc: {doctype} {name}")
+
+		def fake_press_update_item_descriptions(self):
+			resource_item.description = "Press description"
+
+		with patch.object(invoice_module.frappe, "get_cached_doc", side_effect=fake_get_cached_doc), patch.object(
+			invoice_module.PressInvoice, "update_item_descriptions", fake_press_update_item_descriptions
+		):
+			invoice.update_item_descriptions()
+
+		self.assertEqual(seat_item.description, "Seats changed: 1 -> 5")
+		self.assertEqual(resource_item.description, "Press description")
+
 	def test_invoice_prefers_usage_record_remark_over_seat_change_log(self):
 		invoice = Invoice.__new__(Invoice)
 		invoice.type = "Subscription"

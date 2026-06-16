@@ -93,9 +93,12 @@
 		},
 		{
 			"fieldname": "currency",
-			"fieldtype": "Data",
+			"fieldtype": "Link",
 			"hidden": 1,
-			"label": "Currency"
+			"label": "Currency",
+			"options": "Currency",
+			"fetch_from": "team.currency",
+			"fetch_if_empty": 1
 		},
 		{
 			"fieldname": "proration_amount",
