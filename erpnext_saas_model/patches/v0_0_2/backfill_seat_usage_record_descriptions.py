@@ -292,7 +292,7 @@ def _get_invoice_item_for_usage_record(usage_record):
 			"document_type": usage_record.document_type,
 			"document_name": usage_record.document_name,
 			"plan": usage_record.plan,
-			"invoice": usage_record.invoice,
+			"parent": usage_record.invoice,
 		},
 		fields=["name", "amount", "rate", "quantity"],
 		order_by="creation asc",
