@@ -149,8 +149,7 @@
 		const currency = state.currency || 'USD';
 		const locale = currency === 'INR' ? 'en-IN' : 'en-US';
 
-		log('Formatting currency with locale:', locale, 'and currency:', currency);
-		log('Formatting currency:', amount, currency);
+		log('Formatting currency:', locale, amount, currency);
 
 		return new Intl.NumberFormat(locale, {
 			style: 'currency',
