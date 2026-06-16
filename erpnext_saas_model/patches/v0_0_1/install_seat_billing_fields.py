@@ -4,6 +4,7 @@ from __future__ import annotations
 import frappe
 # pyrefly: ignore [missing-import]
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
+from frappe.utils import flt
 
 
 def _ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
@@ -190,17 +191,8 @@ def ensure_usage_record_fields():
 			"insert_after": "subscription",
 		},
 	)
-	_ensure_custom_field(
-		"Usage Record",
-		"seat_amount",
-		{
-			"label": "Seat Amount",
-			"fieldname": "seat_amount",
-			"fieldtype": "Currency",
-			"options": "INR",
-			"insert_after": "billable_seats",
-		},
-	)
+	migrate_usage_record_seat_amount_to_amount()
+	remove_usage_record_seat_amount_field()
 	_ensure_custom_field(
 		"Usage Record",
 		"snapshot_taken_at",
@@ -208,9 +200,36 @@ def ensure_usage_record_fields():
 			"label": "Snapshot Taken At",
 			"fieldname": "snapshot_taken_at",
 			"fieldtype": "Datetime",
-			"insert_after": "seat_amount",
+			"insert_after": "billable_seats",
 		},
 	)
+
+
+def remove_usage_record_seat_amount_field():
+	custom_field_name = frappe.db.get_value("Custom Field", {"dt": "Usage Record", "fieldname": "seat_amount"})
+	if not custom_field_name:
+		return
+
+	frappe.delete_doc("Custom Field", custom_field_name, ignore_permissions=True, force=True)
+
+
+def migrate_usage_record_seat_amount_to_amount():
+	if not frappe.db.has_column("Usage Record", "seat_amount"):
+		return
+
+	usage_records = frappe.get_all(
+		"Usage Record",
+		fields=["name", "date", "seat_amount", "amount"],
+		filters={"plan_type": "Site Plan"},
+	)
+	for usage_record in usage_records:
+		if usage_record.seat_amount is None:
+			continue
+		days_in_month = frappe.utils.get_last_day(usage_record.date).day or 30
+		amount = flt(usage_record.seat_amount / days_in_month, 2)
+		if flt(usage_record.amount or 0, 2) == amount:
+			continue
+		frappe.db.set_value("Usage Record", usage_record.name, "amount", amount, update_modified=False)
 
 
 def ensure_invoice_fields():

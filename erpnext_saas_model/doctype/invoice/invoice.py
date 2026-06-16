@@ -108,11 +108,7 @@ class Invoice(PressInvoice):
 		Returns the invoice seat count and per-day rate.
 		"""
 		billable_seats = cint(getattr(self, "billable_seats", 0) or getattr(usage_record, "billable_seats", 0) or 1)
-		monthly_seat_total = flt(getattr(usage_record, "seat_amount", 0) or getattr(usage_record, "amount", 0), 2)
-		monthly_seat_rate = flt(monthly_seat_total / billable_seats, 2) if billable_seats else monthly_seat_total
-		usage_record_date = frappe.utils.getdate(usage_record.date)
-		days_in_month = frappe.utils.get_last_day(usage_record_date).day or 30
-		daily_rate = flt((monthly_seat_rate * billable_seats) / days_in_month, 2)
+		daily_rate = flt(getattr(usage_record, "amount", 0) or 0, 2)
 		return billable_seats, daily_rate
 
 	def add_usage_record(self, usage_record):

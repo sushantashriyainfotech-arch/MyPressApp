@@ -219,7 +219,6 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 				"subscription",
 				"date",
 				"billable_seats",
-				"seat_amount",
 				"amount",
 				"seat_change_log",
 				*(["team"] if include_team else []),
@@ -241,7 +240,7 @@ def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str
 
 
 def _get_usage_record_daily_rate(usage_record) -> float:
-	monthly_total = flt(getattr(usage_record, "seat_amount", None) or getattr(usage_record, "amount", 0), 2)
+	daily_amount = flt(getattr(usage_record, "amount", 0), 2)
 	usage_date = getdate(usage_record.date)
 	days_in_month = frappe.utils.get_last_day(usage_date).day or 30
-	return flt(monthly_total / days_in_month, 2)
+	return flt(daily_amount / days_in_month, 2)

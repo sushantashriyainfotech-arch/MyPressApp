@@ -24,11 +24,6 @@ class UsageRecord(PressUsageRecord):
 		if not cint(getattr(self, "billable_seats", 0) or 0):
 			self.billable_seats = 1
 
-		if not getattr(self, "seat_amount", None):
-			self.seat_amount = self.amount
-		if not getattr(self, "amount", None):
-			self.amount = self.seat_amount
-
 	def validate_duplicate_usage_record(self):
 		# Keep Press behavior, but do not key duplicates off amount.
 		if self.document_type == "Server":

@@ -48,7 +48,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		usage_record.date = "2026-05-29"
 		usage_record.subscription = "SUB-001"
 		usage_record.amount = 12.5
-		usage_record.seat_amount = None
 		usage_record.billable_seats = 0
 		usage_record.snapshot_taken_at = None
 
@@ -61,7 +60,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			usage_record.validate()
 
 		self.assertEqual(usage_record.amount, 12.5)
-		self.assertEqual(usage_record.seat_amount, 12.5)
 		self.assertEqual(usage_record.billable_seats, 1)
 		self.assertIsNotNone(usage_record.snapshot_taken_at)
 
@@ -173,7 +171,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			document_name="site-001",
 			site="site-001",
 			amount=49.99,
-			seat_amount=49.99,
 			billable_seats=5,
 			snapshot_taken_at=datetime(2026, 5, 15, 18, 0, 0),
 			db_set=lambda *args, **kwargs: None,
@@ -233,7 +230,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 				document_name="site-001",
 				site="site-001",
 				amount=49.99,
-				seat_amount=49.99,
 				billable_seats=billable_seats,
 				snapshot_taken_at=datetime(2026, 5, 15, 18, 0, 0),
 				db_set=lambda *args, **kwargs: None,
@@ -644,7 +640,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 							subscription="SUB-001",
 							remark=None,
 							billable_seats=5,
-							seat_amount=250,
 							amount=250,
 							date="2026-06-30",
 							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),
@@ -658,7 +653,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 							subscription="SUB-002",
 							remark="Seats changed: 3 -> 4",
 							billable_seats=4,
-							seat_amount=250,
 							amount=250,
 							date="2026-06-30",
 							snapshot_taken_at=datetime(2026, 5, 29, 18, 0, 0),

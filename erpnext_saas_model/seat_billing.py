@@ -1315,7 +1315,9 @@ def _insert_seat_usage_record(subscription, date):
 		team=subscription.team,
 	)
 	billable_seats = _get_snapshot_billable_seats(subscription, seat_change_log)
-	seat_amount = flt(selected_price * billable_seats, 2)
+	monthly_amount = flt(selected_price * billable_seats, 2)
+	days_in_month = frappe.utils.get_last_day(date).day or 30
+	daily_amount = flt(monthly_amount / days_in_month, 2)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
 		team=subscription.team,
@@ -1332,14 +1334,13 @@ def _insert_seat_usage_record(subscription, date):
 			"document_name": subscription.document_name,
 			"plan_type": subscription.plan_type,
 			"plan": subscription.plan,
-			"amount": seat_amount,
+			"amount": daily_amount,
 			"currency": team_currency,
 			"date": date,
 			"time": snapshot_taken_at.time().strftime("%H:%M:%S"),
 			"subscription": subscription.name,
 			"site": subscription.site,
 			"billable_seats": billable_seats,
-			"seat_amount": seat_amount,
 			"snapshot_taken_at": snapshot_taken_at,
 			"seat_change_log": getattr(seat_change_log, "name", None) if seat_change_log else None,
 			"remark": remark,
