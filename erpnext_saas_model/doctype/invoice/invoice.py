@@ -103,6 +103,40 @@ class Invoice(PressInvoice):
 				return row
 		return None
 
+	def _seed_seat_usage_invoice_item(self, usage_record, billable_seats: int, description: str, daily_rate: float):
+		invoice_item = self._get_last_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
+		if not invoice_item:
+			invoice_item = self.append(
+				"items",
+				{
+					"document_type": usage_record.document_type,
+					"document_name": usage_record.document_name,
+					"plan": usage_record.plan,
+					"description": description,
+					"usage_record": usage_record.name,
+					"seat_change_log": getattr(usage_record, "seat_change_log", None),
+					"billable_seats": billable_seats,
+					"quantity": 0,
+					"rate": daily_rate,
+					"site": usage_record.site,
+				},
+			)
+		else:
+			if not getattr(invoice_item, "usage_record", None):
+				invoice_item.usage_record = usage_record.name
+			if not getattr(invoice_item, "seat_change_log", None):
+				invoice_item.seat_change_log = getattr(usage_record, "seat_change_log", None)
+			if not getattr(invoice_item, "billable_seats", None):
+				invoice_item.billable_seats = billable_seats
+			if not getattr(invoice_item, "description", None):
+				invoice_item.description = description
+			invoice_item.rate = daily_rate
+
+		if billable_seats:
+			self.billable_seats = billable_seats
+
+		return invoice_item
+
 	def _get_seat_usage_pricing(self, usage_record) -> tuple[int, float]:
 		"""
 		Returns the invoice seat count and per-day rate.
@@ -130,41 +164,10 @@ class Invoice(PressInvoice):
 
 		billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
 		description = self._get_seat_usage_description(usage_record)
+		self._seed_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
 
-		invoice_item = self._get_last_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
-		if not invoice_item:
-			invoice_item = self.append(
-				"items",
-				{
-					"document_type": usage_record.document_type,
-					"document_name": usage_record.document_name,
-					"plan": usage_record.plan,
-					"description": description,
-					"usage_record": usage_record.name,
-					"seat_change_log": getattr(usage_record, "seat_change_log", None),
-					"billable_seats": billable_seats,
-					"quantity": 0,
-					"rate": daily_rate,
-					"site": usage_record.site,
-				},
-			)
-		else:
-			if not getattr(invoice_item, "usage_record", None):
-				invoice_item.usage_record = usage_record.name
-			if not getattr(invoice_item, "seat_change_log", None):
-				invoice_item.seat_change_log = getattr(usage_record, "seat_change_log", None)
-			if not getattr(invoice_item, "billable_seats", None):
-				invoice_item.billable_seats = billable_seats
-			invoice_item.rate = daily_rate
-			if not getattr(invoice_item, "description", None):
-				invoice_item.description = description
-		invoice_item.quantity = flt((invoice_item.quantity or 0) + 1, 2)
-		invoice_item.amount = flt((invoice_item.quantity or 0) * daily_rate, 2)
-		if billable_seats:
-			self.billable_seats = billable_seats
-
-		self.save()
-		usage_record.db_set("invoice", self.name)
+		if hasattr(PressInvoice, "add_usage_record"):
+			return PressInvoice.add_usage_record(self, usage_record)
 
 	def remove_usage_record(self, usage_record):
 		if not self._is_seat_usage_record(usage_record):
@@ -174,23 +177,8 @@ class Invoice(PressInvoice):
 		if self.type != "Subscription":
 			return
 
-		if self.docstatus != 0:
-			return
-		if usage_record.invoice != self.name:
-			return
-
-		billable_seats, daily_rate = self._get_seat_usage_pricing(usage_record)
-		description = self._get_seat_usage_description(usage_record)
-		row = self._find_seat_usage_invoice_item(usage_record, billable_seats, description, daily_rate)
-		if not row:
-			return
-
-		usage_record.db_set("invoice", None)
-		row.quantity = flt((row.quantity or 0) - 1, 2)
-		row.amount = flt((row.quantity or 0) * flt(row.rate or daily_rate, 2), 2)
-		if row.quantity <= 0:
-			self.remove(row)
-		self.save()
+		if hasattr(PressInvoice, "remove_usage_record"):
+			return PressInvoice.remove_usage_record(self, usage_record)
 
 	def get_invoice_item_for_usage_record(self, usage_record):
 		if self._is_seat_usage_record(usage_record):

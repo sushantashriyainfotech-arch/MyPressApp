@@ -158,7 +158,6 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		invoice.append = fake_append
 		invoice.save = lambda *args, **kwargs: None
-		invoice.get_invoice_item_for_usage_record = lambda usage_record: None
 
 		usage_record = SimpleNamespace(
 			plan="PLAN-001",
