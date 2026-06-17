@@ -47,8 +47,8 @@ def ensure_seat_change_log_fields():
 		{
 			"label": "Seat Change Log",
 			"fieldname": "seat_change_log",
-			"fieldtype": "Link",
-			"options": "Seat Change Log",
+			"fieldtype": "Data",
+			"options": "",
 			"hidden": 1,
 			"read_only": 1,
 			"no_copy": 1,
@@ -61,8 +61,8 @@ def ensure_seat_change_log_fields():
 		{
 			"label": "Seat Change Log",
 			"fieldname": "seat_change_log",
-			"fieldtype": "Link",
-			"options": "Seat Change Log",
+			"fieldtype": "Data",
+			"options": "",
 			"hidden": 1,
 			"read_only": 1,
 			"no_copy": 1,
