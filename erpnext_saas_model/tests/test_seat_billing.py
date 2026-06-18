@@ -111,6 +111,18 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "USD"), 31.0)
 		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "INR"), 31.0)
 
+	def test_plan_price_falls_back_to_other_currency_when_selected_currency_is_zero(self):
+		plan = SimpleNamespace(
+			name="PLAN-001",
+			billing_type="Seat Based",
+			price_inr=100,
+			price_usd=0,
+			total_price=0,
+		)
+
+		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "USD"), 100.0)
+		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "INR"), 100.0)
+
 	def test_seat_usage_record_uses_fallback_plan_price(self):
 		subscription = SimpleNamespace(
 			name="SUB-001",
