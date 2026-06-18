@@ -1270,6 +1270,41 @@ def get_seat_usage_record_amount(
 	return flt(monthly_amount / days_in_month, 2)
 
 
+def get_seat_usage_record_billable_seats(
+	subscription: str | dict[str, Any],
+	seat_change_log: str | dict[str, Any] | None = None,
+) -> int:
+	"""Return the best available seat count for a seat-based usage snapshot."""
+	if isinstance(subscription, str):
+		subscription = frappe.get_cached_doc("Subscription", subscription)
+
+	if seat_change_log:
+		new_seats = cint(_get_seat_change_log_value(seat_change_log, "new_seats") or 0)
+		if new_seats:
+			return new_seats
+
+	current_seats = cint(getattr(subscription, "billable_seats", 0) or 0)
+	if current_seats:
+		return current_seats
+
+	site_name = getattr(subscription, "site", None) or (
+		getattr(subscription, "document_name", None) if getattr(subscription, "document_type", None) == "Site" else None
+	)
+	if site_name:
+		site_seats = get_site_billable_seats(site_name)
+		if site_seats:
+			return site_seats
+
+	plan_name = getattr(subscription, "plan", None)
+	plan_type = getattr(subscription, "plan_type", None)
+	if plan_name and plan_type:
+		plan = frappe.get_cached_doc(plan_type, plan_name)
+		if is_seat_based_plan(plan):
+			return cint(getattr(plan, "min_seats", 0) or 1)
+
+	return 0
+
+
 @frappe.whitelist()
 def change_subscription_seats(subscription: str, new_seats: int) -> dict[str, Any]:
 	"""API wrapper to trigger a seat count update on a subscription."""
@@ -1333,13 +1368,14 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 def _insert_seat_usage_record(subscription, date):
 	"""Internal helper to insert a 'Usage Record' document into the database."""
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
+	team_currency = get_team_currency(subscription.team)
 	snapshot_taken_at = now_datetime()
 	seat_change_log = get_seat_change_log_for_reference(
 		subscription.name,
 		reference_at=snapshot_taken_at,
 		team=subscription.team,
 	)
-	billable_seats = _get_snapshot_billable_seats(subscription, seat_change_log)
+	billable_seats = get_seat_usage_record_billable_seats(subscription, seat_change_log)
 	daily_amount = get_seat_usage_record_amount(
 		plan=plan,
 		team=subscription.team,
@@ -1380,9 +1416,4 @@ def _insert_seat_usage_record(subscription, date):
 
 
 def _get_snapshot_billable_seats(subscription, seat_change_log=None) -> int:
-	if seat_change_log:
-		new_seats = cint(_get_seat_change_log_value(seat_change_log, "new_seats") or 0)
-		if new_seats:
-			return new_seats
-
-	return cint(getattr(subscription, "billable_seats", 0) or 0)
+	return get_seat_usage_record_billable_seats(subscription, seat_change_log)
