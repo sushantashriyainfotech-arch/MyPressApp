@@ -274,8 +274,8 @@ def ensure_invoice_item_fields():
 		{
 			"label": "Usage Record",
 			"fieldname": "usage_record",
-			"fieldtype": "Link",
-			"options": "Usage Record",
+			"fieldtype": "Data",
+			"options": "",
 			"hidden": 1,
 			"read_only": 1,
 			"no_copy": 1,
