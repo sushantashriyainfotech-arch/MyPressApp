@@ -620,14 +620,12 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		with patch.object(invoice_item_usage_record_patch_module.frappe.db, "get_value", return_value="CF-001"), patch.object(
 			invoice_item_usage_record_patch_module.frappe, "get_doc", return_value=custom_field
-		), patch.object(custom_field, "save", return_value=None) as save_mock, patch.object(
-			invoice_item_usage_record_patch_module, "create_custom_field", side_effect=AssertionError("unexpected create")
+		), patch.object(invoice_item_usage_record_patch_module.frappe, "delete_doc", return_value=None) as delete_mock, patch.object(
+			invoice_item_usage_record_patch_module, "create_custom_field", return_value=None
 		):
 			invoice_item_usage_record_patch_module.execute()
 
-		self.assertEqual(custom_field.fieldtype, "Data")
-		self.assertEqual(custom_field.options, "")
-		save_mock.assert_called_once_with(ignore_permissions=True)
+		delete_mock.assert_called_once_with("Custom Field", "CF-001", force=1, ignore_permissions=True)
 
 	def test_backfill_patch_sets_missing_invoice_item_descriptions(self):
 		captured = []

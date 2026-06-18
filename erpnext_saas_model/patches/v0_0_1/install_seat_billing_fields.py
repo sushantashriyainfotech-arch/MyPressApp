@@ -11,6 +11,10 @@ def _ensure_custom_field(doctype: str, fieldname: str, df: dict) -> None:
 	custom_field_name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname})
 	if custom_field_name:
 		custom_field = frappe.get_doc("Custom Field", custom_field_name)
+		if getattr(custom_field, "fieldtype", None) != df.get("fieldtype"):
+			frappe.delete_doc("Custom Field", custom_field_name, force=1, ignore_permissions=True)
+			create_custom_field(doctype, df, ignore_validate=True)
+			return
 		changed = False
 		for key, value in df.items():
 			if getattr(custom_field, key, None) != value:
