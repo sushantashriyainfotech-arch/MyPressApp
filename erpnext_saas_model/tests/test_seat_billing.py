@@ -652,6 +652,36 @@ class TestSeatBillingHelpers(FrappeTestCase):
 
 		delete_mock.assert_any_call("Custom Field", "CF-002", force=1, ignore_permissions=True)
 
+	def test_invoice_item_lookup_falls_back_when_usage_record_pointer_is_missing(self):
+		invoice_item = SimpleNamespace(
+			parent="INV-001",
+			document_type="Site",
+			document_name="site-001",
+			plan="PLAN-001",
+			rate=8.33,
+			usage_record="UR-DELETED",
+			seat_change_log=None,
+		)
+		fallback_usage_record = SimpleNamespace(
+			name="UR-001",
+			subscription="SUB-001",
+			date="2026-06-01",
+			billable_seats=5,
+			amount=250,
+			seat_change_log="SEAT-LOG-001",
+		)
+
+		with patch.object(
+			backfill_patch_module.frappe.db, "exists", return_value=False
+		), patch.object(backfill_patch_module.frappe, "get_doc", side_effect=AssertionError("unexpected get_doc")), patch.object(
+			backfill_patch_module.frappe,
+			"get_all",
+			return_value=[fallback_usage_record],
+		):
+			result = backfill_patch_module._get_usage_record_for_invoice_item(invoice_item, set())
+
+		self.assertEqual(result.name, "UR-001")
+
 	def test_backfill_patch_sets_missing_invoice_item_descriptions(self):
 		captured = []
 

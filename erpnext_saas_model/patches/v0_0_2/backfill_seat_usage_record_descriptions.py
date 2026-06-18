@@ -235,8 +235,9 @@ def _should_replace_description(description: str | None) -> bool:
 def _get_usage_record_for_invoice_item(invoice_item, used_usage_records: set[str]):
 	include_team = _has_column("Usage Record", "team")
 	include_seat_amount = _has_column("Usage Record", "seat_amount")
-	if getattr(invoice_item, "usage_record", None):
-		return frappe.get_doc("Usage Record", invoice_item.usage_record)
+	usage_record_name = getattr(invoice_item, "usage_record", None)
+	if usage_record_name and frappe.db.exists("Usage Record", usage_record_name):
+		return frappe.get_doc("Usage Record", usage_record_name)
 
 	usage_records = frappe.get_all(
 		"Usage Record",

@@ -117,8 +117,9 @@ def backfill_invoice_item_descriptions(seat_plan_names):
 
 def _get_usage_record_for_invoice_item(invoice_item):
 	include_team = _has_column("Usage Record", "team")
-	if getattr(invoice_item, "usage_record", None):
-		return frappe.get_doc("Usage Record", invoice_item.usage_record)
+	usage_record_name = getattr(invoice_item, "usage_record", None)
+	if usage_record_name and frappe.db.exists("Usage Record", usage_record_name):
+		return frappe.get_doc("Usage Record", usage_record_name)
 
 	usage_records = frappe.get_all(
 		"Usage Record",
