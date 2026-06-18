@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint, now_datetime
+from frappe.utils import cint, flt, now_datetime
 
 from press.press.doctype.usage_record.usage_record import UsageRecord as PressUsageRecord
 
-from erpnext_saas_model.seat_billing import is_seat_based_plan
+from erpnext_saas_model.seat_billing import get_seat_usage_record_amount, is_seat_based_plan
 
 
 class UsageRecord(PressUsageRecord):
@@ -23,6 +23,14 @@ class UsageRecord(PressUsageRecord):
 
 		if not cint(getattr(self, "billable_seats", 0) or 0):
 			self.billable_seats = 1
+
+		if not flt(getattr(self, "amount", 0) or 0, 2):
+			self.amount = get_seat_usage_record_amount(
+				plan=plan,
+				team=getattr(self, "team", None),
+				billable_seats=getattr(self, "billable_seats", 0) or 0,
+				reference_at=getattr(self, "snapshot_taken_at", None) or getattr(self, "date", None),
+			)
 
 	def validate_duplicate_usage_record(self):
 		# Keep Press behavior, but do not key duplicates off amount.

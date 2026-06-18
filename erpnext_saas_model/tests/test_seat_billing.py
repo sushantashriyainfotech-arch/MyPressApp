@@ -69,6 +69,82 @@ class TestSeatBillingHelpers(FrappeTestCase):
 		self.assertEqual(usage_record.billable_seats, 1)
 		self.assertIsNotNone(usage_record.snapshot_taken_at)
 
+	def test_usage_record_validate_populates_missing_amount(self):
+		usage_record = UsageRecord.__new__(UsageRecord)
+		usage_record.plan = "PLAN-001"
+		usage_record.plan_type = "Site Plan"
+		usage_record.name = "UR-001"
+		usage_record.team = "TEAM-001"
+		usage_record.document_type = "Site"
+		usage_record.document_name = "SITE-001"
+		usage_record.interval = "Daily"
+		usage_record.date = "2026-05-29"
+		usage_record.subscription = "SUB-001"
+		usage_record.amount = 0
+		usage_record.billable_seats = 4
+		usage_record.snapshot_taken_at = None
+
+		plan = SimpleNamespace(billing_type="Seat Based")
+		with patch.object(usage_record_module.PressUsageRecord, "validate", return_value=None), patch.object(
+			usage_record_module.frappe, "get_cached_doc", return_value=plan
+		), patch.object(usage_record_module, "is_seat_based_plan", return_value=True), patch.object(
+			usage_record_module, "get_seat_usage_record_amount", return_value=12.9
+		), patch.object(usage_record_module, "now_datetime", return_value=datetime(2026, 5, 29, 0, 0, 0)):
+			usage_record.validate()
+
+		self.assertEqual(usage_record.amount, 12.9)
+		self.assertEqual(usage_record.billable_seats, 4)
+		self.assertIsNotNone(usage_record.snapshot_taken_at)
+
+	def test_plan_price_falls_back_to_legacy_total_price(self):
+		plan = SimpleNamespace(
+			name="PLAN-001",
+			billing_type="Seat Based",
+			price_inr=0,
+			price_usd=0,
+			total_price=31,
+		)
+
+		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "USD"), 31.0)
+		self.assertEqual(seat_billing_module.get_plan_price_for_currency(plan, "INR"), 31.0)
+
+	def test_seat_usage_record_uses_fallback_plan_price(self):
+		subscription = SimpleNamespace(
+			name="SUB-001",
+			plan_type="Site Plan",
+			plan="PLAN-001",
+			team="TEAM-001",
+			document_type="Site",
+			document_name="SITE-001",
+			site="site-001",
+			billable_seats=4,
+		)
+		plan = SimpleNamespace(
+			name="PLAN-001",
+			billing_type="Seat Based",
+			price_inr=0,
+			price_usd=0,
+			total_price=31,
+		)
+		captured_doc = {}
+
+		def fake_get_doc(doc):
+			captured_doc.update(doc)
+			return SimpleNamespace(insert=lambda ignore_permissions=True: None, submit=lambda: None)
+
+		with patch.object(seat_billing_module.frappe, "get_cached_doc", return_value=plan), patch.object(
+			seat_billing_module, "get_team_currency", return_value="USD"
+		), patch.object(seat_billing_module, "now_datetime", return_value=datetime(2026, 5, 15, 8, 30, 0)), patch.object(
+			seat_billing_module, "get_seat_change_log_for_reference", return_value=None
+		), patch.object(
+			seat_billing_module, "get_seat_usage_record_remark", return_value="Seats changed: 2 -> 4"
+		), patch.object(seat_billing_module.frappe, "get_doc", side_effect=fake_get_doc):
+			seat_billing_module._insert_seat_usage_record(subscription, "2026-05-15")
+
+		self.assertEqual(captured_doc["amount"], 1.0)
+		self.assertEqual(captured_doc["billable_seats"], 4)
+		self.assertEqual(captured_doc["remark"], "Seats changed: 2 -> 4")
+
 	def test_duplicate_usage_record_check_ignores_amount(self):
 		usage_record = UsageRecord.__new__(UsageRecord)
 		usage_record.name = "UR-002"

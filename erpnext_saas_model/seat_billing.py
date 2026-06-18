@@ -82,6 +82,8 @@ def get_plan_price_for_currency(
 	if price in (None, ""):
 		price = getattr(plan, fallback_field, None)
 	if price in (None, ""):
+		price = get_plan_total_price(plan)
+	if price in (None, ""):
 		price = 0
 
 	return flt(price, 2)
@@ -244,10 +246,7 @@ def _calculate_seat_change_proration_amount(
 		return 0.0
 
 	team_currency = get_team_currency(getattr(subscription_doc, "team", None))
-	if team_currency == "INR":
-		selected_price = flt(getattr(subscription_doc, "price_inr", 0) or getattr(plan, "price_inr", 0) or 0, 2)
-	else:
-		selected_price = flt(getattr(subscription_doc, "price_usd", 0) or getattr(plan, "price_usd", 0) or 0, 2)
+	selected_price = get_plan_price_for_currency(plan, team_currency)
 	if not selected_price:
 		return 0.0
 
@@ -323,7 +322,8 @@ def get_seat_pricing_preview(plan: str, seats: int = 1) -> dict[str, Any]:
 	plan_doc = frappe.get_cached_doc("Site Plan", plan)
 	price_inr = flt(getattr(plan_doc, "price_inr", 0) or 0, 2)
 	price_usd = flt(getattr(plan_doc, "price_usd", 0) or 0, 2)
-	selected_price = price_usd or price_inr
+	team_currency = get_team_currency(None)
+	selected_price = get_plan_price_for_currency(plan_doc, team_currency)
 	if not is_seat_based_plan(plan_doc):
 		return {
 			"plan": plan_doc.name,
@@ -1248,6 +1248,28 @@ def get_seat_usage_record_remark(
 	return "Seats changed"
 
 
+def get_seat_usage_record_amount(
+	plan: str | dict[str, Any],
+	team: str | None,
+	billable_seats: int,
+	reference_at=None,
+) -> float:
+	"""Return the daily seat usage amount for a seat-based snapshot."""
+	billable_seats = cint(billable_seats or 0)
+	if not billable_seats:
+		return 0.0
+
+	team_currency = get_team_currency(team)
+	selected_price = get_plan_price_for_currency(plan, team_currency)
+	if not selected_price:
+		return 0.0
+
+	usage_date = getdate(reference_at or now_datetime())
+	days_in_month = frappe.utils.get_last_day(usage_date).day or 30
+	monthly_amount = flt(selected_price * billable_seats, 2)
+	return flt(monthly_amount / days_in_month, 2)
+
+
 @frappe.whitelist()
 def change_subscription_seats(subscription: str, new_seats: int) -> dict[str, Any]:
 	"""API wrapper to trigger a seat count update on a subscription."""
@@ -1311,8 +1333,6 @@ def activate_seat_billing(subscription: str, plan: str, new_seats: int) -> dict[
 def _insert_seat_usage_record(subscription, date):
 	"""Internal helper to insert a 'Usage Record' document into the database."""
 	plan = frappe.get_cached_doc(subscription.plan_type, subscription.plan)
-	team_currency = get_team_currency(subscription.team)
-	selected_price = get_plan_price_for_currency(plan, team_currency)
 	snapshot_taken_at = now_datetime()
 	seat_change_log = get_seat_change_log_for_reference(
 		subscription.name,
@@ -1320,9 +1340,12 @@ def _insert_seat_usage_record(subscription, date):
 		team=subscription.team,
 	)
 	billable_seats = _get_snapshot_billable_seats(subscription, seat_change_log)
-	monthly_amount = flt(selected_price * billable_seats, 2)
-	days_in_month = frappe.utils.get_last_day(date).day or 30
-	daily_amount = flt(monthly_amount / days_in_month, 2)
+	daily_amount = get_seat_usage_record_amount(
+		plan=plan,
+		team=subscription.team,
+		billable_seats=billable_seats,
+		reference_at=date,
+	)
 	remark = get_seat_usage_record_remark(
 		subscription=subscription.name,
 		team=subscription.team,
