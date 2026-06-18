@@ -20,6 +20,28 @@ class TestSiteUserSeatLimit(FrappeTestCase):
 		throw.assert_called_once()
 		self.assertIn("upgrade to PRO", throw.call_args.args[0])
 
+	def test_validate_site_user_seat_limit_allows_unlimited(self):
+		with patch.object(
+			seat_billing,
+			"get_site_seat_limit_context",
+			return_value={"billable_seats": 0, "active_user_count": 99, "next_plan": "PRO"},
+		), patch.object(seat_billing.frappe, "throw") as throw:
+			context = seat_billing.validate_site_user_seat_limit("site-001", enabled=True)
+
+		throw.assert_not_called()
+		self.assertEqual(context["billable_seats"], 0)
+
+	def test_validate_team_member_seat_limit_allows_unlimited(self):
+		with patch.object(
+			seat_billing,
+			"get_team_seat_limit_context",
+			return_value={"billable_seats": 0, "active_user_count": 99, "next_plan": "PRO"},
+		), patch.object(seat_billing.frappe, "throw") as throw:
+			context = seat_billing.validate_team_member_seat_limit("TEAM-001")
+
+		throw.assert_not_called()
+		self.assertEqual(context["billable_seats"], 0)
+
 	def test_upsert_site_user_enables_existing_user_with_room(self):
 		site = SimpleNamespace(name="site-001")
 		existing_user = SimpleNamespace(name="SU-001", enabled=0)

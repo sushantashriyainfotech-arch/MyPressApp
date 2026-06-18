@@ -12,6 +12,11 @@ from erpnext_saas_model.user_eligibility import _log_user_eligibility
 SEAT_BILLING_SNAPSHOT_HOUR = 0
 ACTIVE_USER_CACHE_TTL = 60 * 5
 
+
+def has_billable_seat_limit(billable_seats: int | None) -> bool:
+	"""Return True when a billable seat cap is actually enforced."""
+	return cint(billable_seats or 0) > 0
+
 def is_seat_based_plan(plan: str | dict[str, Any] | None) -> bool:
 	"""
 	Checks if a given Site Plan follows a 'Seat Based' billing model.
@@ -473,15 +478,15 @@ def get_site_billable_seats(site: str | dict[str, Any] | None) -> int:
 		return 0
 
 	billable_seats = cint(getattr(site_doc, "billable_seats", 0) or 0)
-	if billable_seats:
+	if has_billable_seat_limit(billable_seats):
 		return billable_seats
 
 	if subscription:
 		billable_seats = cint(getattr(subscription, "billable_seats", 0) or 0)
-		if billable_seats:
+		if has_billable_seat_limit(billable_seats):
 			return billable_seats
 
-	return cint(getattr(plan, "min_seats", 0) or 1)
+	return 0
 
 
 def get_site_seat_limit_context(site: str | dict[str, Any] | None) -> dict[str, Any]:
@@ -584,7 +589,7 @@ def validate_site_user_seat_limit(site: str | dict[str, Any], enabled: bool = Tr
 		)
 		return context
 
-	if not context["billable_seats"]:
+	if not has_billable_seat_limit(context["billable_seats"]):
 		_log_user_eligibility(
 			"validate_site_user_seat_limit.skipped",
 			context,
@@ -919,7 +924,7 @@ def validate_team_member_seat_limit(team: str | dict[str, Any]) -> dict[str, Any
 	Ensures that adding another team member does not exceed billable seats.
 	"""
 	context = get_team_seat_limit_context(team)
-	if not context["billable_seats"]:
+	if not has_billable_seat_limit(context["billable_seats"]):
 		return context
 
 	if context["active_user_count"] >= context["billable_seats"]:
@@ -1002,7 +1007,7 @@ def validate_seat_change(subscription: str | dict[str, Any], new_seats: int) -> 
 
 	new_seats = cint(new_seats)
 	min_seats = cint(getattr(plan, "min_seats", 0) or 1)
-	if new_seats < min_seats:
+	if new_seats > 0 and new_seats < min_seats:
 		frappe.throw(_("You need at least {0} seats on this plan.").format(min_seats))
 
 	max_seats = cint(getattr(plan, "max_seats", 0) or 0)
@@ -1048,7 +1053,7 @@ def validate_seat_selection_for_plan(site: str | None, plan: str | dict[str, Any
 	team_currency = get_team_currency(frappe.get_cached_doc("Site", site).team if site else None)
 	new_seats = cint(new_seats)
 	min_seats = cint(getattr(plan_doc, "min_seats", 0) or 1)
-	if new_seats < min_seats:
+	if new_seats > 0 and new_seats < min_seats:
 		frappe.throw(_("You need at least {0} seats on this plan.").format(min_seats))
 
 	max_seats = cint(getattr(plan_doc, "max_seats", 0) or 0)

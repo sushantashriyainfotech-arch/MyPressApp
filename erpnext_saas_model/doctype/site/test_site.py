@@ -66,6 +66,25 @@ class TestSiteSeatPlanChanges(FrappeTestCase):
 		set_value.assert_not_called()
 		change_plan.assert_not_called()
 
+	def test_set_plan_clears_billable_seats_for_resource_based_plan(self):
+		site = Site.__new__(Site)
+		site.name = "SITE-001"
+		site.plan = "PLAN-001"
+		site.team = "TEAM-001"
+		site.billable_seats = 5
+
+		plan = SimpleNamespace(name="PLAN-002", billing_type="Resource Based")
+
+		with patch.object(site_module.frappe, "get_cached_doc", return_value=plan), patch.object(
+			site_module.PressSite, "set_plan", return_value="ok"
+		) as base_set_plan, patch.object(site_module.frappe.db, "set_value") as set_value:
+			result = site.set_plan("PLAN-002")
+
+		base_set_plan.assert_called_once_with("PLAN-002")
+		set_value.assert_called_once_with("Site", "SITE-001", "billable_seats", 0, update_modified=False)
+		self.assertEqual(site.billable_seats, 0)
+		self.assertEqual(result, "ok")
+
 	def test_update_seat_count_rejects_cross_team_subscription(self):
 		site = Site.__new__(Site)
 		site.name = "SITE-001"

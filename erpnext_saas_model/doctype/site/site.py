@@ -37,6 +37,7 @@ class Site(PressSite):
 
 		plan = frappe.get_cached_doc("Site Plan", plan_name)
 		if not is_seat_based_plan(plan):
+			self.billable_seats = 0
 			return
 
 		# Default to plan's minimum seats if not specified
@@ -205,7 +206,7 @@ class Site(PressSite):
 			result = self.change_plan(plan)
 			return result
 
-		if billable_seats is not None and self.name:
-			self._set_billable_seats(billable_seats)
+		if self.name:
+			self._set_billable_seats(0)
 
 		return super().set_plan(plan)

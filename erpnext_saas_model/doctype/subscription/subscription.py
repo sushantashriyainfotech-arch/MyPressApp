@@ -88,7 +88,7 @@ class Subscription(PressSubscription):
 
 	def _clear_seat_billing_fields(self, plan=None) -> None:
 		"""Reset seat-billing fields when the subscription is no longer seat-based."""
-		self.billable_seats = 1
+		self.billable_seats = 0
 		self.currency = get_team_currency(getattr(self, "team", None))
 		self.price_inr = 0
 		self.price_usd = 0
