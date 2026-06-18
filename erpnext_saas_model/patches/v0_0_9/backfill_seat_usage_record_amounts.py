@@ -79,6 +79,19 @@ def backfill_resource_usage_record_amounts(resource_plan_names):
 	if not resource_plan_names:
 		return
 
+	include_additional_storage = _has_column("Usage Record", "additional_storage")
+	fields = [
+		"name",
+		"plan",
+		"team",
+		"amount",
+		"interval",
+		"document_type",
+		"document_name",
+	]
+	if include_additional_storage:
+		fields.append("additional_storage")
+
 	usage_records = frappe.get_all(
 		"Usage Record",
 		filters={
@@ -86,16 +99,7 @@ def backfill_resource_usage_record_amounts(resource_plan_names):
 			"plan": ("in", resource_plan_names),
 			"docstatus": 1,
 		},
-		fields=[
-			"name",
-			"plan",
-			"team",
-			"amount",
-			"interval",
-			"document_type",
-			"document_name",
-			"additional_storage",
-		],
+		fields=fields,
 		order_by="creation asc",
 	)
 
@@ -114,7 +118,7 @@ def backfill_resource_usage_record_amounts(resource_plan_names):
 			plan=plan,
 			team_currency=getattr(team, "currency", None) if team else None,
 			interval=getattr(usage_record, "interval", None),
-			additional_storage=getattr(usage_record, "additional_storage", None),
+			additional_storage=getattr(usage_record, "additional_storage", None) if include_additional_storage else None,
 		)
 		if flt(amount, 2) <= 0:
 			continue
@@ -141,3 +145,16 @@ def get_resource_usage_record_amount(
 	if interval == "Monthly":
 		return flt(price_per_day * 30, 2)
 	return flt(price_per_day, 2)
+
+
+def _has_column(doctype: str, fieldname: str) -> bool:
+	has_column = getattr(frappe.db, "has_column", None)
+	if callable(has_column):
+		try:
+			return bool(has_column(doctype, fieldname))
+		except Exception:
+			return False
+
+	return bool(frappe.db.get_value("DocField", {"parent": doctype, "fieldname": fieldname}, "name")) or bool(
+		frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name")
+	)

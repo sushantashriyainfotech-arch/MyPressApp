@@ -27,6 +27,9 @@ from erpnext_saas_model.patches.v0_0_7 import (
 from erpnext_saas_model.patches.v0_0_8 import (
 	convert_invoice_item_usage_record_reference_to_data as invoice_item_usage_record_patch_module,
 )
+from erpnext_saas_model.patches.v0_0_9 import (
+	backfill_seat_usage_record_amounts as usage_record_amount_backfill_patch_module,
+)
 
 
 class TestSeatBillingHelpers(FrappeTestCase):
@@ -683,6 +686,50 @@ class TestSeatBillingHelpers(FrappeTestCase):
 				),
 			],
 		)
+
+	def test_resource_usage_record_backfill_skips_missing_additional_storage_column(self):
+		captured_fields = []
+		captured_updates = []
+
+		def fake_get_all(doctype, filters=None, fields=None, pluck=None, order_by=None, limit=None):
+			if doctype == "Usage Record":
+				captured_fields.extend(fields or [])
+				return [
+					SimpleNamespace(
+						name="UR-001",
+						plan="PLAN-001",
+						team="TEAM-001",
+						amount=0,
+						interval="Daily",
+						document_type="Site",
+						document_name="site-001",
+					),
+				]
+			raise AssertionError(f"Unexpected doctype: {doctype}")
+
+		def fake_get_cached_doc(doctype, name):
+			if doctype == "Site Plan":
+				return SimpleNamespace(name=name, price_inr=100, price_usd=2, period=30)
+			if doctype == "Team":
+				return SimpleNamespace(name=name, currency="INR", parent_team=None, billing_team=None, payment_mode=None)
+			raise AssertionError(f"Unexpected cached doc: {doctype} {name}")
+
+		def fake_set_value(doctype, name, fieldname, value, update_modified=False):
+			captured_updates.append((doctype, name, fieldname, value, update_modified))
+
+		with patch.object(usage_record_amount_backfill_patch_module.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			usage_record_amount_backfill_patch_module.frappe,
+			"get_cached_doc",
+			side_effect=fake_get_cached_doc,
+		), patch.object(
+			usage_record_amount_backfill_patch_module.frappe.db,
+			"set_value",
+			side_effect=fake_set_value,
+		), patch.object(usage_record_amount_backfill_patch_module.frappe.db, "has_column", return_value=False):
+			usage_record_amount_backfill_patch_module.backfill_resource_usage_record_amounts(["PLAN-001"])
+
+		self.assertNotIn("additional_storage", captured_fields)
+		self.assertEqual(captured_updates, [("Usage Record", "UR-001", "amount", 3.33, False)])
 
 	def test_invoice_item_usage_record_patch_converts_link_to_data(self):
 		custom_field = SimpleNamespace(
