@@ -21,6 +21,9 @@ from erpnext_saas_model.patches.v0_0_4 import (
 from erpnext_saas_model.patches.v0_0_5 import (
 	backfill_seat_usage_invoice_item_grouping as usage_invoice_backfill_patch_module,
 )
+from erpnext_saas_model.patches.v0_0_7 import (
+	convert_seat_change_log_references_to_data as seat_change_log_reference_patch_module,
+)
 from erpnext_saas_model.patches.v0_0_8 import (
 	convert_invoice_item_usage_record_reference_to_data as invoice_item_usage_record_patch_module,
 )
@@ -626,6 +629,28 @@ class TestSeatBillingHelpers(FrappeTestCase):
 			invoice_item_usage_record_patch_module.execute()
 
 		delete_mock.assert_called_once_with("Custom Field", "CF-001", force=1, ignore_permissions=True)
+
+	def test_seat_change_log_reference_patch_converts_link_to_data(self):
+		custom_field = SimpleNamespace(
+			dt="Usage Record",
+			fieldname="seat_change_log",
+			label="Seat Change Log",
+			fieldtype="Link",
+			options="Seat Change Log",
+			hidden=1,
+			read_only=1,
+			no_copy=1,
+			insert_after="snapshot_taken_at",
+		)
+
+		with patch.object(seat_change_log_reference_patch_module.frappe.db, "get_value", return_value="CF-002"), patch.object(
+			seat_change_log_reference_patch_module.frappe, "get_doc", return_value=custom_field
+		), patch.object(seat_change_log_reference_patch_module.frappe, "delete_doc", return_value=None) as delete_mock, patch.object(
+			seat_change_log_reference_patch_module, "create_custom_field", return_value=None
+		):
+			seat_change_log_reference_patch_module.execute()
+
+		delete_mock.assert_any_call("Custom Field", "CF-002", force=1, ignore_permissions=True)
 
 	def test_backfill_patch_sets_missing_invoice_item_descriptions(self):
 		captured = []
